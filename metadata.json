@@ -1,0 +1,6 @@
+{
+  "name": "Grilled Restaurant POS",
+  "description": "Kurdish Sorani RTL Restaurant Operations & Point-of-Sale System with Firebase persistence, order customization, expense tracking, and daily financial reporting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
