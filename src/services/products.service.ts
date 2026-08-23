@@ -276,22 +276,59 @@ export async function updateProduct(
   const prodDocRef = doc(db, PRODUCTS_COLLECTION, productId);
   const path = `${PRODUCTS_COLLECTION}/${productId}`;
 
-  const payload: Record<string, any> = {
-    updatedAt: serverTimestamp(),
-    updatedBy: userId,
-  };
-
-  if (input.name !== undefined) payload.name = input.name.trim();
-  if (input.categoryId !== undefined) payload.categoryId = input.categoryId.trim();
-  if (input.price !== undefined) payload.price = Math.round(input.price);
-  if (input.active !== undefined) payload.active = Boolean(input.active);
-  if (input.allowPortions !== undefined) payload.allowPortions = Boolean(input.allowPortions);
-  if (input.customPortions !== undefined) payload.customPortions = input.customPortions;
-  if (input.availableCustomizations !== undefined) payload.availableCustomizations = input.availableCustomizations;
-  if (input.imageUrl !== undefined) payload.imageUrl = input.imageUrl;
-
   try {
-    await updateDoc(prodDocRef, payload);
+    const snap = await getDoc(prodDocRef);
+    if (!snap.exists()) {
+      // Find fallback default product definition
+      const defaultProd = DEFAULT_PRODUCTS.find((p) => p.id === productId);
+      const initialName = input.name?.trim() || defaultProd?.name || 'خواردن';
+      const initialPrice = input.price !== undefined ? Math.round(input.price) : (defaultProd?.price || 1000);
+      const initialCat = input.categoryId?.trim() || defaultProd?.categoryId || 'kebab';
+      const initialActive = input.active !== undefined ? Boolean(input.active) : (defaultProd?.active ?? true);
+      const initialAllowPortions = input.allowPortions !== undefined ? Boolean(input.allowPortions) : (defaultProd?.allowPortions ?? false);
+
+      const initialPayload: Record<string, any> = {
+        id: productId,
+        name: initialName,
+        categoryId: initialCat,
+        price: initialPrice,
+        active: initialActive,
+        allowPortions: initialAllowPortions,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        createdBy: userId,
+        updatedBy: userId,
+      };
+
+      if (input.customPortions || defaultProd?.customPortions) {
+        initialPayload.customPortions = input.customPortions || defaultProd?.customPortions;
+      }
+      if (input.availableCustomizations || defaultProd?.availableCustomizations) {
+        initialPayload.availableCustomizations = input.availableCustomizations || defaultProd?.availableCustomizations;
+      }
+      if (input.imageUrl || defaultProd?.imageUrl) {
+        initialPayload.imageUrl = input.imageUrl || defaultProd?.imageUrl;
+      }
+
+      await setDoc(prodDocRef, initialPayload);
+      return;
+    }
+
+    const payload: Record<string, any> = {
+      updatedAt: serverTimestamp(),
+      updatedBy: userId,
+    };
+
+    if (input.name !== undefined) payload.name = input.name.trim();
+    if (input.categoryId !== undefined) payload.categoryId = input.categoryId.trim();
+    if (input.price !== undefined) payload.price = Math.round(input.price);
+    if (input.active !== undefined) payload.active = Boolean(input.active);
+    if (input.allowPortions !== undefined) payload.allowPortions = Boolean(input.allowPortions);
+    if (input.customPortions !== undefined) payload.customPortions = input.customPortions;
+    if (input.availableCustomizations !== undefined) payload.availableCustomizations = input.availableCustomizations;
+    if (input.imageUrl !== undefined) payload.imageUrl = input.imageUrl;
+
+    await setDoc(prodDocRef, payload, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
     throw error;
@@ -314,11 +351,43 @@ export async function setProductAvailability(
   const path = `${PRODUCTS_COLLECTION}/${productId}`;
 
   try {
-    await updateDoc(prodDocRef, {
-      active: Boolean(active),
-      updatedAt: serverTimestamp(),
-      updatedBy: userId,
-    });
+    const snap = await getDoc(prodDocRef);
+    if (!snap.exists()) {
+      const defaultProd = DEFAULT_PRODUCTS.find((p) => p.id === productId);
+      const initialPayload: Record<string, any> = {
+        id: productId,
+        name: defaultProd?.name || 'خواردن',
+        categoryId: defaultProd?.categoryId || 'kebab',
+        price: defaultProd?.price || 1000,
+        active: Boolean(active),
+        allowPortions: defaultProd?.allowPortions ?? false,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+        createdBy: userId,
+        updatedBy: userId,
+      };
+      if (defaultProd?.customPortions) {
+        initialPayload.customPortions = defaultProd.customPortions;
+      }
+      if (defaultProd?.availableCustomizations) {
+        initialPayload.availableCustomizations = defaultProd.availableCustomizations;
+      }
+      if (defaultProd?.imageUrl) {
+        initialPayload.imageUrl = defaultProd.imageUrl;
+      }
+      await setDoc(prodDocRef, initialPayload);
+      return;
+    }
+
+    await setDoc(
+      prodDocRef,
+      {
+        active: Boolean(active),
+        updatedAt: serverTimestamp(),
+        updatedBy: userId,
+      },
+      { merge: true }
+    );
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
     throw error;

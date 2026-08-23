@@ -17,8 +17,8 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated()
         && request.resource.data.name is string
-        && request.resource.data.basePrice is int
-        && request.resource.data.basePrice > 0;
+        && (request.resource.data.price is int || request.resource.data.price is number)
+        && request.resource.data.price > 0;
       allow update: if isAuthenticated();
       allow delete: if false; // Products should be disabled (active: false) rather than deleted to preserve referential integrity
     }
@@ -29,7 +29,7 @@ service cloud.firestore {
       allow create: if isAuthenticated()
         && request.resource.data.createdBy == request.auth.uid
         && request.resource.data.status == 'completed'
-        && request.resource.data.totalAmount is int
+        && (request.resource.data.totalAmount is int || request.resource.data.totalAmount is number)
         && request.resource.data.totalAmount > 0
         && request.resource.data.items.size() > 0;
       allow update, delete: if false; // Immutable financial record
@@ -40,7 +40,7 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated()
         && request.resource.data.createdBy == request.auth.uid
-        && request.resource.data.amount is int
+        && (request.resource.data.amount is int || request.resource.data.amount is number)
         && request.resource.data.amount > 0
         && request.resource.data.category is string;
       allow update, delete: if false; // Immutable operational expense record
@@ -52,9 +52,9 @@ service cloud.firestore {
       allow create: if isAuthenticated()
         && request.resource.data.closedBy == request.auth.uid
         && request.resource.data.status == 'closed'
-        && request.resource.data.totalSales is int
-        && request.resource.data.totalExpenses is int
-        && request.resource.data.netProfit is int;
+        && (request.resource.data.totalSales is int || request.resource.data.totalSales is number)
+        && (request.resource.data.totalExpenses is int || request.resource.data.totalExpenses is number)
+        && (request.resource.data.netProfit is int || request.resource.data.netProfit is number);
       allow update, delete: if false; // Cannot overwrite existing closed register
     }
 
