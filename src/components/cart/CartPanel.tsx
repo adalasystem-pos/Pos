@@ -13,6 +13,7 @@ import { Button } from '../ui/Button';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { EmptyState } from '../ui/EmptyState';
 import { formatIQD } from '../../utils/currency';
+import { formatBaghdadTime } from '../../utils/dates';
 import { ShoppingBag, Trash2, CheckCircle2, MessageSquare } from 'lucide-react';
 
 export const CartPanel: React.FC = () => {
@@ -31,7 +32,7 @@ export const CartPanel: React.FC = () => {
 
   const { user, displayName } = useAuth();
   const { isProductActive } = useProducts();
-  const { success, error } = useToast();
+  const { showToast, error, warning } = useToast();
   const { isOnline } = useNetworkStatus();
 
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
@@ -40,6 +41,7 @@ export const CartPanel: React.FC = () => {
   const [isSuccessModalOpen, setIsSuccessModalOpen] = useState<boolean>(false);
 
   const handleCompleteOrder = async () => {
+    // Step 1: Validations
     if (!user) {
       error('تکایە سەرەتا بچۆ ژوورەوە بۆ تەواوکردنی داواکاری');
       return;
@@ -55,17 +57,28 @@ export const CartPanel: React.FC = () => {
       return;
     }
 
-    // Availability validation check
+    // Availability & pricing validation check
     const inactiveItem = items.find((item) => !isProductActive(item.productId));
     if (inactiveItem) {
-      error(`خواردنی (${inactiveItem.productName}) لە ئێستادا بەردەست نییە و ناتوانرێت بفرۆشرێت. تکایە لە سەبەتەکە لایببە.`);
+      error(
+        `خواردنی (${inactiveItem.productName}) لە ئێستادا بەردەست نییە و ناتوانرێت بفرۆشرێت. تکایە لە سەبەتەکە لایببە.`
+      );
       return;
     }
+
+    const invalidPriceItem = items.find((item) => item.unitPrice <= 0 || item.quantity <= 0);
+    if (invalidPriceItem) {
+      error('نرخ یان ژمارەی بڕگەی سەبەتە نادروستە');
+      return;
+    }
+
+    // Step 2: Prevent duplicate submission
+    if (isSubmitting) return;
 
     try {
       setIsSubmitting(true);
 
-      // Save order via service (authoritative validation & recalculation occurs inside createOrder)
+      // Step 3 & 4: Create and save order in Firestore with status = 'preparing'
       const newOrder = await createOrder({
         items,
         note,
@@ -73,16 +86,39 @@ export const CartPanel: React.FC = () => {
         userName: displayName,
       });
 
-      // ONLY clear cart after Firestore confirms successful write
+      // Step 5: Confirmed success -> Clear cart
       clearCart();
-      success(`فرۆشتن بە سەرکەوتوویی تەواو کرا (${formatIQD(newOrder.totalAmount)})`);
-      
-      // Open receipt & confirmation modal
+
+      const shortOrderId = newOrder.orderId ? newOrder.orderId.slice(-6).toUpperCase() : '000000';
+      const timeStr = formatBaghdadTime(newOrder.createdAt);
+
+      // Trigger preparation notification
+      showToast(
+        `ژمارەی داواکاری: #${shortOrderId} • کات: ${timeStr} (${formatIQD(newOrder.totalAmount)})`,
+        'success',
+        'داواکاریەکە نێردرا بۆ ئامادەکردن',
+        5000
+      );
+
+      // Step 6 & 7: Set completed order state and open modal
       setCompletedOrder(newOrder);
       setIsSuccessModalOpen(true);
+
+      // Step 8: Trigger POS receipt print automatically
+      setTimeout(() => {
+        try {
+          window.print();
+        } catch (printErr) {
+          console.warn('Automatic print dialog error:', printErr);
+          warning('فرۆشتن بە سەرکەوتوویی تۆمارکرا، بەڵام چاپکردنی پسوولە سەرکەوتوو نەبوو');
+        }
+      }, 350);
     } catch (err: any) {
       console.error('Order creation error:', err);
-      error(err.message || 'فرۆشتن تۆمار نەکرا. تکایە دووبارە هەوڵ بدەرەوە.');
+      // If saving fails: preserve cart and notify
+      error(
+        err.message || 'داواکاریەکە نەنێردرا بۆ ئامادەکردن. فرۆشتن تۆمار نەکرا. تکایە دووبارە هەوڵ بدەرەوە.'
+      );
     } finally {
       setIsSubmitting(false);
     }

@@ -4,7 +4,7 @@ import { formatIQD } from '../../utils/currency';
 import { formatBaghdadTime } from '../../utils/dates';
 import { Card } from '../ui/Card';
 import { EmptyState } from '../ui/EmptyState';
-import { ShoppingBag, Clock, User, CheckCircle2 } from 'lucide-react';
+import { ShoppingBag, Clock, User, CheckCircle2, Utensils } from 'lucide-react';
 
 interface DailyOrdersListProps {
   orders: Order[];
@@ -88,10 +88,17 @@ export const DailyOrdersList: React.FC<DailyOrdersListProps> = ({ orders, loadin
               <User className="w-3.5 h-3.5" />
               <span>کاشێر: {order.createdByName || 'کاشێر'}</span>
             </span>
-            <span className="flex items-center gap-1 text-emerald-600 font-bold">
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>تەواوکراو</span>
-            </span>
+            {order.status === 'preparing' ? (
+              <span className="flex items-center gap-1 text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
+                <Utensils className="w-3.5 h-3.5 text-amber-600" />
+                <span>لە ئامادەکردندایە</span>
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                <span>تەواوکراو</span>
+              </span>
+            )}
           </div>
         </Card>
       ))}

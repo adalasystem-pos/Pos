@@ -39,3 +39,51 @@
 button, input, select, textarea {
   touch-action: manipulation;
 }
+
+/* Safe area bottom padding for iPhone / iPad / touch devices */
+.safe-area-pb {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom, 0.5rem));
+}
+
+/* Print optimization for 80mm / 58mm POS Thermal Printers */
+@media print {
+  @page {
+    margin: 0mm;
+    size: 80mm auto;
+  }
+
+  html, body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+
+  /* Hide app navigation, headers, and UI chrome */
+  #sidebar-navigation,
+  #bottom-navigation,
+  #main-header,
+  #toast-container,
+  .print\\:hidden,
+  dialog,
+  [role="dialog"] button {
+    display: none !important;
+  }
+
+  /* Expose receipt clearly on thermal roll */
+  #pos-thermal-receipt {
+    display: block !important;
+    width: 80mm !important;
+    max-width: 80mm !important;
+    margin: 0 auto !important;
+    padding: 2mm 4mm !important;
+    visibility: visible !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  #pos-thermal-receipt * {
+    visibility: visible !important;
+  }
+}

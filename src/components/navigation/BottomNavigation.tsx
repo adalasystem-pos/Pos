@@ -41,7 +41,7 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
   return (
     <nav
       id="bottom-navigation"
-      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-orange-100 shadow-xl px-1 py-0.5 safe-area-pb select-none"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-orange-100 shadow-[0_-4px_16px_rgba(0,0,0,0.06)] px-1 py-0.5 safe-area-pb select-none"
     >
       <div className="flex items-center justify-around h-16">
         {tabs.map((tab) => {

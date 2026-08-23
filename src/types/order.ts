@@ -10,7 +10,7 @@ export interface CartItem {
   lineTotal: number; // Integer IQD: unitPrice * quantity
 }
 
-export type OrderStatus = 'completed' | 'cancelled';
+export type OrderStatus = 'preparing' | 'completed' | 'cancelled';
 
 export interface Order {
   orderId: string;

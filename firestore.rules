@@ -28,11 +28,12 @@ service cloud.firestore {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated()
         && request.resource.data.createdBy == request.auth.uid
-        && request.resource.data.status == 'completed'
+        && (request.resource.data.status == 'preparing' || request.resource.data.status == 'completed')
         && (request.resource.data.totalAmount is int || request.resource.data.totalAmount is number)
         && request.resource.data.totalAmount > 0
         && request.resource.data.items.size() > 0;
-      allow update, delete: if false; // Immutable financial record
+      allow update: if isAuthenticated();
+      allow delete: if false; // Immutable financial record
     }
 
     // Expenses Collection: Restaurant daily operational costs

@@ -63,35 +63,41 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
   }
 
   // 3. Generate unique order ID and record
-  const ordersRef = collection(db, ORDERS_COLLECTION);
-  const newOrderDoc = doc(ordersRef);
-  const baghdadDate = getBaghdadDateString();
+  try {
+    const ordersRef = collection(db, ORDERS_COLLECTION);
+    const newOrderDoc = doc(ordersRef);
+    const baghdadDate = getBaghdadDateString();
 
-  const orderPayload = {
-    orderId: newOrderDoc.id,
-    items: verifiedItems,
-    subtotal,
-    totalAmount,
-    note: note.trim(),
-    status: 'completed' as const,
-    createdAt: serverTimestamp(),
-    createdBy: userId,
-    createdByName: userName,
-    baghdadDate,
-  };
+    const orderPayload = {
+      orderId: newOrderDoc.id,
+      items: verifiedItems,
+      subtotal,
+      totalAmount,
+      note: note.trim(),
+      status: 'preparing' as const,
+      createdAt: serverTimestamp(),
+      createdBy: userId,
+      createdByName: userName,
+      baghdadDate,
+    };
 
-  // 4. Save to Firestore
-  await setDoc(newOrderDoc, orderPayload);
+    // 4. Save to Firestore
+    await setDoc(newOrderDoc, orderPayload);
 
-  // Return the created order model
-  return {
-    ...orderPayload,
-    createdAt: new Date(),
-  };
+    // Return the created order model
+    return {
+      ...orderPayload,
+      createdAt: new Date(),
+    };
+  } catch (error) {
+    console.error('Error creating order:', error);
+    throw error;
+  }
 }
 
 /**
  * Retrieves orders for a specific Baghdad business day.
+ * Includes all active orders (preparing, completed, and legacy orders).
  */
 export async function getTodayOrders(targetDateStr?: string): Promise<Order[]> {
   const dateStr = targetDateStr || getBaghdadDateString();
@@ -103,13 +109,15 @@ export async function getTodayOrders(targetDateStr?: string): Promise<Order[]> {
   try {
     const q = query(
       ordersRef,
-      where('baghdadDate', '==', dateStr),
-      where('status', '==', 'completed')
+      where('baghdadDate', '==', dateStr)
     );
     const snapshot = await getDocs(q);
     const orders: Order[] = [];
     snapshot.forEach((d) => {
-      orders.push(d.data() as Order);
+      const ord = d.data() as Order;
+      if (ord.status !== 'cancelled') {
+        orders.push(ord);
+      }
     });
     // Sort descending by creation
     return orders.sort((a, b) => {
@@ -129,14 +137,17 @@ export async function getTodayOrders(targetDateStr?: string): Promise<Order[]> {
     const snapshot = await getDocs(fallbackQ);
     const orders: Order[] = [];
     snapshot.forEach((d) => {
-      orders.push(d.data() as Order);
+      const ord = d.data() as Order;
+      if (ord.status !== 'cancelled') {
+        orders.push(ord);
+      }
     });
     return orders;
   }
 }
 
 /**
- * Real-time listener for today's completed orders.
+ * Real-time listener for today's active orders (preparing, completed, and legacy).
  */
 export function listenTodayOrders(
   callback: (orders: Order[]) => void,
@@ -147,8 +158,7 @@ export function listenTodayOrders(
   const ordersRef = collection(db, ORDERS_COLLECTION);
   const q = query(
     ordersRef,
-    where('baghdadDate', '==', dateStr),
-    where('status', '==', 'completed')
+    where('baghdadDate', '==', dateStr)
   );
 
   return onSnapshot(
@@ -156,7 +166,10 @@ export function listenTodayOrders(
     (snapshot) => {
       const orders: Order[] = [];
       snapshot.forEach((d) => {
-        orders.push(d.data() as Order);
+        const ord = d.data() as Order;
+        if (ord.status !== 'cancelled') {
+          orders.push(ord);
+        }
       });
       orders.sort((a, b) => {
         const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
