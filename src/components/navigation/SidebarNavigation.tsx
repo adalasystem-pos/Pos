@@ -95,11 +95,24 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
       </div>
 
       {/* Provider Attribution Box */}
-      <div className="p-4 border-t border-orange-100 bg-orange-50/40">
+      <div
+        className="p-4 border-t border-orange-100 bg-orange-50/40"
+        style={{ borderStyle: 'outset', borderWidth: '5px' }}
+      >
         <div className="space-y-1 text-center">
           <div className="flex items-center justify-center gap-1 text-[11px] font-bold text-orange-950/80">
             <Shield className="w-3 h-3 text-orange-500" />
-            <span>{APP_CONFIG.providerAttributionKurdish}</span>
+            <span
+              style={{
+                borderWidth: '0px',
+                borderRadius: '0px',
+                borderStyle: 'inset',
+                marginLeft: '0px',
+                marginRight: '0px',
+              }}
+            >
+              {APP_CONFIG.providerAttributionKurdish}
+            </span>
           </div>
           <p className="text-[9px] text-gray-400 font-medium tracking-wide">
             {APP_CONFIG.providerAttribution}

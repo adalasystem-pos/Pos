@@ -58,7 +58,14 @@ export const DailyClosingCard: React.FC<DailyClosingCardProps> = ({
               )}
             </div>
 
-            <p className={`text-xs ${isClosed ? 'text-gray-400' : 'text-gray-500'}`}>
+            <p
+              className={`text-xs ${isClosed ? 'text-gray-400' : 'text-gray-500'}`}
+              style={{
+                fontWeight: 'normal',
+                textAlign: 'center',
+                color: '#49638f',
+              }}
+            >
               {isClosed
                 ? `لە ڕێکەوتی ${formatBaghdadDateTime(closing.closedAt)} لەلایەن (${closing.closedByName || 'کاشێر'}) داخراوە.`
                 : 'لە کۆتایی دەوامی کارکردندا سندوق دابخە بۆ پاشەکەوتکردنی کۆتایی حساباتی ڕۆژ.'}
@@ -92,21 +99,51 @@ export const DailyClosingCard: React.FC<DailyClosingCardProps> = ({
       {/* Snapshot metrics if already closed */}
       {isClosed && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-5 pt-5 border-t border-gray-800 text-xs">
-          <div className="p-3 rounded-2xl bg-gray-800/60">
-            <span className="text-gray-400 block text-[10px]">کۆی فرۆش</span>
+          <div className="p-3 rounded-2xl bg-gray-800/60" style={{ backgroundColor: '#3a4152' }}>
+            <span
+              className="text-gray-400 block text-[10px]"
+              style={{ color: '#ffffff', fontWeight: 'bold', textAlign: 'center' }}
+            >
+              کۆی فرۆش
+            </span>
             <span className="font-bold text-emerald-400">{formatIQD(closing.totalSales)}</span>
           </div>
-          <div className="p-3 rounded-2xl bg-gray-800/60">
-            <span className="text-gray-400 block text-[10px]">کۆی خەرجی</span>
+          <div className="p-3 rounded-2xl bg-gray-800/60" style={{ backgroundColor: '#3a4152' }}>
+            <span
+              className="text-gray-400 block text-[10px]"
+              style={{ color: '#ffffff', fontWeight: 'bold', textAlign: 'center' }}
+            >
+              کۆی خەرجی
+            </span>
             <span className="font-bold text-red-400">{formatIQD(closing.totalExpenses)}</span>
           </div>
-          <div className="p-3 rounded-2xl bg-gray-800/60">
-            <span className="text-gray-400 block text-[10px]">ژمارەی فرۆشەکان</span>
+          <div className="p-3 rounded-2xl bg-gray-800/60" style={{ backgroundColor: '#3a4152' }}>
+            <span
+              className="text-gray-400 block text-[10px]"
+              style={{ color: '#ffffff', fontWeight: 'bold', textAlign: 'center' }}
+            >
+              ژمارەی فرۆشەکان
+            </span>
             <span className="font-bold text-white">{closing.orderCount} داواکاری</span>
           </div>
-          <div className="p-3 rounded-2xl bg-gray-800/60">
-            <span className="text-gray-400 block text-[10px]">ژمارەی خەرجییەکان</span>
-            <span className="font-bold text-white">{closing.expenseCount} خەرجی</span>
+          <div className="p-3 rounded-2xl bg-gray-800/60" style={{ backgroundColor: '#3a4152' }}>
+            <span
+              className="text-gray-400 block text-[10px]"
+              style={{
+                color: '#ffffff',
+                fontWeight: 'bold',
+                fontStyle: 'normal',
+                textAlign: 'center',
+              }}
+            >
+              ژمارەی خەرجییەکان
+            </span>
+            <span
+              className="font-bold text-white block"
+              style={{ textAlign: 'right', fontWeight: 'bold', lineHeight: '16px' }}
+            >
+              {closing.expenseCount} خەرجی
+            </span>
           </div>
         </div>
       )}

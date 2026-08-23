@@ -28,7 +28,15 @@ export const Header: React.FC = () => {
         </div>
         <div>
           <div className="flex items-center gap-2.5">
-            <h1 className="text-base sm:text-lg font-black text-gray-900 leading-tight">
+            <h1
+              className="font-black text-gray-900 leading-tight"
+              style={{
+                fontSize: '20px',
+                borderWidth: '0px',
+                borderStyle: 'double',
+                borderRadius: '0px',
+              }}
+            >
               {APP_CONFIG.restaurantName}
             </h1>
             <div className="hidden sm:flex items-center gap-1.5 text-xs text-orange-700 bg-orange-50 border border-orange-100 px-2.5 py-1 rounded-xl font-bold">
