@@ -13,6 +13,8 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   role: UserRole;
+  setRole: (role: UserRole) => void;
+  isAdminOrManager: boolean;
   displayName: string;
   loginEmail: (email: string, pass: string) => Promise<void>;
   registerEmail: (email: string, pass: string, name: string) => Promise<void>;
@@ -28,15 +30,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [role, setRoleState] = useState<UserRole>(() => {
+    const saved = localStorage.getItem('user_pos_role') as UserRole;
+    return saved || 'admin'; // Default to admin for full menu management access
+  });
 
   useEffect(() => {
     const unsubscribe = subscribeToAuth((firebaseUser) => {
       setUser(firebaseUser);
+      if (firebaseUser) {
+        // Auto-assign admin role to adala.system@gmail.com or admin emails
+        if (firebaseUser.email?.includes('admin') || firebaseUser.email === 'adala.system@gmail.com') {
+          setRoleState('admin');
+        }
+      }
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
+
+  const setRole = useCallback((newRole: UserRole) => {
+    setRoleState(newRole);
+    localStorage.setItem('user_pos_role', newRole);
+  }, []);
+
+  const isAdminOrManager = role === 'admin' || role === 'manager';
 
   const clearError = useCallback(() => {
     setError(null);
@@ -103,7 +122,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   }, []);
 
-  const role: UserRole = 'cashier'; // Default role, extendable
   const displayName = user?.displayName || user?.email?.split('@')[0] || 'کاشێر';
 
   return (
@@ -112,6 +130,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         user,
         loading,
         role,
+        setRole,
+        isAdminOrManager,
         displayName,
         loginEmail,
         registerEmail,

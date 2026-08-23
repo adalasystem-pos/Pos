@@ -24,6 +24,10 @@ export interface Product {
   categoryId: string;
   price: number; // Integer IQD for standard portion (نەفەر)
   active: boolean;
+  createdAt?: any;
+  updatedAt?: any;
+  createdBy?: string;
+  updatedBy?: string;
   allowPortions?: boolean;
   customPortions?: { [key in Portion]?: number }; // Specific integer override price per portion if non-standard
   availableCustomizations?: string[];

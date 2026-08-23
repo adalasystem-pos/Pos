@@ -2,13 +2,17 @@ import React, { useState } from 'react';
 import { useCart } from '../../hooks/useCart';
 import { useAuth } from '../../hooks/useAuth';
 import { useToast } from '../../hooks/useToast';
+import { useProducts } from '../../hooks/useProducts';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { createOrder } from '../../services/orders.service';
+import { Order } from '../../types/order';
 import { CartItemRow } from './CartItemRow';
 import { OrderSummary } from './OrderSummary';
+import { OrderSuccessModal } from './OrderSuccessModal';
 import { Button } from '../ui/Button';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { EmptyState } from '../ui/EmptyState';
+import { formatIQD } from '../../utils/currency';
 import { ShoppingBag, Trash2, CheckCircle2, MessageSquare } from 'lucide-react';
 
 export const CartPanel: React.FC = () => {
@@ -26,11 +30,14 @@ export const CartPanel: React.FC = () => {
   } = useCart();
 
   const { user, displayName } = useAuth();
+  const { isProductActive } = useProducts();
   const { success, error } = useToast();
   const { isOnline } = useNetworkStatus();
 
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState<boolean>(false);
+  const [completedOrder, setCompletedOrder] = useState<Order | null>(null);
+  const [isSuccessModalOpen, setIsSuccessModalOpen] = useState<boolean>(false);
 
   const handleCompleteOrder = async () => {
     if (!user) {
@@ -48,11 +55,18 @@ export const CartPanel: React.FC = () => {
       return;
     }
 
+    // Availability validation check
+    const inactiveItem = items.find((item) => !isProductActive(item.productId));
+    if (inactiveItem) {
+      error(`خواردنی (${inactiveItem.productName}) لە ئێستادا بەردەست نییە و ناتوانرێت بفرۆشرێت. تکایە لە سەبەتەکە لایببە.`);
+      return;
+    }
+
     try {
       setIsSubmitting(true);
 
       // Save order via service (authoritative validation & recalculation occurs inside createOrder)
-      await createOrder({
+      const newOrder = await createOrder({
         items,
         note,
         userId: user.uid,
@@ -61,10 +75,14 @@ export const CartPanel: React.FC = () => {
 
       // ONLY clear cart after Firestore confirms successful write
       clearCart();
-      success('داواکاری بە سەرکەوتوویی تۆمارکرا');
+      success(`فرۆشتن بە سەرکەوتوویی تەواو کرا (${formatIQD(newOrder.totalAmount)})`);
+      
+      // Open receipt & confirmation modal
+      setCompletedOrder(newOrder);
+      setIsSuccessModalOpen(true);
     } catch (err: any) {
       console.error('Order creation error:', err);
-      error(err.message || 'تۆمارکردنی داواکاری سەرکەوتوو نەبوو. تکایە دووبارە هەوڵ بدەرەوە.');
+      error(err.message || 'فرۆشتن تۆمار نەکرا. تکایە دووبارە هەوڵ بدەرەوە.');
     } finally {
       setIsSubmitting(false);
     }
@@ -181,6 +199,16 @@ export const CartPanel: React.FC = () => {
         message="دڵنیایت لە سڕینەوەی هەموو بڕگەکانی ناو ئەم سەبەتەیە؟"
         confirmText="بەڵێ، بەتاڵی بکە"
         variant="danger"
+      />
+
+      {/* Sales Completion Receipt & Confirmation Modal */}
+      <OrderSuccessModal
+        order={completedOrder}
+        isOpen={isSuccessModalOpen}
+        onClose={() => {
+          setIsSuccessModalOpen(false);
+          setCompletedOrder(null);
+        }}
       />
     </div>
   );

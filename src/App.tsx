@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
+import { ProductsProvider } from './contexts/ProductsContext';
 import { CartProvider } from './contexts/CartContext';
 import { AppShell } from './components/layout/AppShell';
 import { NavTab } from './components/navigation/BottomNavigation';
 import { POSPage } from './pages/POSPage';
+import { ProductsPage } from './pages/ProductsPage';
 import { ExpensesPage } from './pages/ExpensesPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { AuthView } from './components/auth/AuthView';
@@ -16,8 +18,8 @@ const MainAppContent: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-neutral-900 text-white">
-        <LoadingState message="پشکنینی چوونەژوورەوەی سیستەم..." className="text-white" />
+      <div className="min-h-screen flex items-center justify-center bg-orange-50 text-gray-800">
+        <LoadingState message="پشکنینی چوونەژوورەوەی سیستەم..." />
       </div>
     );
   }
@@ -29,6 +31,7 @@ const MainAppContent: React.FC = () => {
   return (
     <AppShell activeTab={activeTab} onSelectTab={setActiveTab}>
       {activeTab === 'pos' && <POSPage />}
+      {activeTab === 'products' && <ProductsPage />}
       {activeTab === 'expenses' && <ExpensesPage />}
       {activeTab === 'reports' && <ReportsPage />}
     </AppShell>
@@ -39,9 +42,11 @@ export default function App() {
   return (
     <AuthProvider>
       <ToastProvider>
-        <CartProvider>
-          <MainAppContent />
-        </CartProvider>
+        <ProductsProvider>
+          <CartProvider>
+            <MainAppContent />
+          </CartProvider>
+        </ProductsProvider>
       </ToastProvider>
     </AuthProvider>
   );

@@ -12,6 +12,17 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    // Products Collection: Menu items, pricing, portions, and availability status
+    match /products/{productId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && request.resource.data.name is string
+        && request.resource.data.basePrice is int
+        && request.resource.data.basePrice > 0;
+      allow update: if isAuthenticated();
+      allow delete: if false; // Products should be disabled (active: false) rather than deleted to preserve referential integrity
+    }
+
     // Orders Collection: Real-time orders and POS receipts
     match /orders/{orderId} {
       allow read: if isAuthenticated();

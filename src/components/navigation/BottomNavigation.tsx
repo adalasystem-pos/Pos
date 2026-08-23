@@ -1,7 +1,7 @@
 import React from 'react';
-import { ShoppingBag, Receipt, BarChart3 } from 'lucide-react';
+import { ShoppingBag, UtensilsCrossed, Receipt, BarChart3 } from 'lucide-react';
 
-export type NavTab = 'pos' | 'expenses' | 'reports';
+export type NavTab = 'pos' | 'products' | 'expenses' | 'reports';
 
 interface BottomNavigationProps {
   activeTab: NavTab;
@@ -17,9 +17,14 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
   const tabs = [
     {
       id: 'pos' as NavTab,
-      label: 'فرۆشتن (POS)',
+      label: 'فرۆشتن',
       icon: ShoppingBag,
       badge: cartCount > 0 ? cartCount : undefined,
+    },
+    {
+      id: 'products' as NavTab,
+      label: 'ئایتمەکان',
+      icon: UtensilsCrossed,
     },
     {
       id: 'expenses' as NavTab,
@@ -28,7 +33,7 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
     },
     {
       id: 'reports' as NavTab,
-      label: 'ڕاپۆرت و سندوق',
+      label: 'ڕاپۆرت',
       icon: BarChart3,
     },
   ];
@@ -36,7 +41,7 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
   return (
     <nav
       id="bottom-navigation"
-      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-orange-100 shadow-xl px-2 py-0.5 safe-area-pb"
+      className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-orange-100 shadow-xl px-1 py-0.5 safe-area-pb select-none"
     >
       <div className="flex items-center justify-around h-16">
         {tabs.map((tab) => {
@@ -49,9 +54,9 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
               id={`nav-tab-${tab.id}`}
               type="button"
               onClick={() => onSelectTab(tab.id)}
-              className={`relative flex flex-col items-center justify-center h-full px-4 min-w-[76px] transition-all cursor-pointer ${
+              className={`relative flex flex-col items-center justify-center h-full px-2.5 min-w-[68px] transition-all cursor-pointer ${
                 isActive
-                  ? 'text-orange-600 font-bold border-t-3 border-orange-500 bg-orange-50/40'
+                  ? 'text-orange-600 font-bold border-t-3 border-orange-500 bg-orange-50/50'
                   : 'text-gray-400 hover:text-gray-700 active:scale-95'
               }`}
             >

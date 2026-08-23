@@ -5,7 +5,8 @@ import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
 import { Input } from '../ui/Input';
-import { Flame, Lock, Mail, User, ArrowRight, ShieldCheck } from 'lucide-react';
+import { APP_CONFIG } from '../../config/appConfig';
+import { Flame, Lock, Mail, User, ArrowRight, ShieldCheck, Shield } from 'lucide-react';
 
 export const AuthView: React.FC = () => {
   const { loginEmail, registerEmail, loginCashier, error: authError } = useAuth();
@@ -81,10 +82,10 @@ export const AuthView: React.FC = () => {
             <Flame className="w-9 h-9" />
           </div>
           <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-gray-900">
-            سیستەمی چێشتخانەی برژاو
+            {APP_CONFIG.restaurantName}
           </h1>
-          <p className="text-xs sm:text-sm text-gray-500 font-medium">
-            خاڵی فرۆشتن (POS) و کۆنتڕۆڵی دارایی و سندوقی ڕۆژانە
+          <p className="text-xs sm:text-sm text-gray-500 font-bold">
+            {APP_CONFIG.systemName}
           </p>
         </div>
 
@@ -265,7 +266,19 @@ export const AuthView: React.FC = () => {
             <span>پارێزراوە لە ڕێگەی Firebase Authentication و Cloud Firestore</span>
           </div>
         </Card>
+
+        {/* Provider Attribution Footer */}
+        <div className="text-center space-y-1 pt-2">
+          <div className="flex items-center justify-center gap-1 text-xs font-bold text-gray-600">
+            <Shield className="w-3.5 h-3.5 text-orange-500" />
+            <span>{APP_CONFIG.providerAttributionKurdish}</span>
+          </div>
+          <p className="text-[10px] text-gray-400 font-medium">
+            {APP_CONFIG.providerAttribution}
+          </p>
+        </div>
       </div>
     </div>
   );
 };
+

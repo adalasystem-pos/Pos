@@ -1,7 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { Product, ProductCategory, Portion } from '../types/product';
-import { DEFAULT_CATEGORIES, DEFAULT_PRODUCTS } from '../data/products';
+import { DEFAULT_CATEGORIES } from '../data/products';
 import { useCart } from '../hooks/useCart';
+import { useProducts } from '../hooks/useProducts';
+import { useToast } from '../hooks/useToast';
 import { CategoryTabs } from '../components/pos/CategoryTabs';
 import { ProductGrid } from '../components/pos/ProductGrid';
 import { ProductModal } from '../components/pos/ProductModal';
@@ -11,8 +13,9 @@ import { Search, ShoppingBag } from 'lucide-react';
 
 export const POSPage: React.FC = () => {
   const { addItem, itemCount } = useCart();
+  const { products, loading: productsLoading } = useProducts();
+  const { error: toastError } = useToast();
   const [categories] = useState<ProductCategory[]>(DEFAULT_CATEGORIES);
-  const [products] = useState<Product[]>(DEFAULT_PRODUCTS);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -33,6 +36,11 @@ export const POSPage: React.FC = () => {
   }, [products, selectedCategoryId, searchQuery]);
 
   const handleProductClick = (product: Product) => {
+    if (product.active === false) {
+      toastError(`خواردنی (${product.name}) لە ئێستادا بەردەست نییە`);
+      return;
+    }
+
     // If product has portions or customizable options, open modal
     if (
       product.allowPortions ||
@@ -52,6 +60,10 @@ export const POSPage: React.FC = () => {
     customizations: string[],
     quantity: number
   ) => {
+    if (product.active === false) {
+      toastError(`خواردنی (${product.name}) لە ئێستادا بەردەست نییە`);
+      return;
+    }
     addItem(product, portion, customizations, quantity);
   };
 

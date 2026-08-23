@@ -1,6 +1,7 @@
 import React from 'react';
-import { ShoppingBag, Receipt, BarChart3, Flame } from 'lucide-react';
+import { ShoppingBag, UtensilsCrossed, Receipt, BarChart3, Flame, Shield } from 'lucide-react';
 import { NavTab } from './BottomNavigation';
+import { APP_CONFIG } from '../../config/appConfig';
 
 interface SidebarNavigationProps {
   activeTab: NavTab;
@@ -16,9 +17,14 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
   const tabs = [
     {
       id: 'pos' as NavTab,
-      label: 'فرۆشتن (POS)',
+      label: 'خاڵی فرۆشتن (POS)',
       icon: ShoppingBag,
       badge: cartCount > 0 ? cartCount : undefined,
+    },
+    {
+      id: 'products' as NavTab,
+      label: 'بەڕێوەبردنی ئایتمەکان',
+      icon: UtensilsCrossed,
     },
     {
       id: 'expenses' as NavTab,
@@ -35,16 +41,20 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
   return (
     <aside
       id="sidebar-navigation"
-      className="hidden md:flex flex-col w-64 bg-white text-gray-800 shrink-0 border-l border-orange-100 shadow-sm"
+      className="hidden md:flex flex-col w-64 bg-white text-gray-800 shrink-0 border-l border-orange-100 shadow-sm select-none"
     >
-      {/* Brand */}
-      <div className="p-5 border-b border-orange-100 flex items-center gap-3">
-        <div className="w-10 h-10 bg-orange-500 text-white rounded-xl flex items-center justify-center font-bold text-xl shadow-xs">
-          <Flame className="w-5 h-5" />
+      {/* Restaurant Brand Header */}
+      <div className="p-5 border-b border-orange-100 flex items-center gap-3 bg-white">
+        <div className="w-11 h-11 bg-orange-500 text-white rounded-2xl flex items-center justify-center font-bold text-xl shadow-xs shrink-0">
+          <Flame className="w-6 h-6" />
         </div>
-        <div>
-          <h1 className="font-black text-base text-gray-800 tracking-tight">سیستەمی فرۆشتن</h1>
-          <p className="text-xs text-orange-600/80 font-bold">چێشتخانەی برژاو</p>
+        <div className="overflow-hidden">
+          <h1 className="font-black text-base text-gray-900 tracking-tight leading-tight truncate">
+            {APP_CONFIG.restaurantName}
+          </h1>
+          <p className="text-xs text-orange-600 font-bold leading-tight">
+            {APP_CONFIG.systemName}
+          </p>
         </div>
       </div>
 
@@ -82,6 +92,19 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
             </button>
           );
         })}
+      </div>
+
+      {/* Provider Attribution Box */}
+      <div className="p-4 border-t border-orange-100 bg-orange-50/40">
+        <div className="space-y-1 text-center">
+          <div className="flex items-center justify-center gap-1 text-[11px] font-bold text-orange-950/80">
+            <Shield className="w-3 h-3 text-orange-500" />
+            <span>{APP_CONFIG.providerAttributionKurdish}</span>
+          </div>
+          <p className="text-[9px] text-gray-400 font-medium tracking-wide">
+            {APP_CONFIG.providerAttribution}
+          </p>
+        </div>
       </div>
     </aside>
   );
