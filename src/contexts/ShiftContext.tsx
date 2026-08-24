@@ -92,6 +92,9 @@ export const ShiftProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     if (role === 'captain') {
       throw new Error('کاپتن دەسەڵاتی بەڕێوەبردنی سندوق و شێفتی نییە');
     }
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      throw new Error('پەیوەندی ئینتەرنێت بەردەست نییە. ناتوانرێت کرداری سندوق ئەنجام بدرێت.');
+    }
   }, [user, role]);
 
   const openShift = useCallback(

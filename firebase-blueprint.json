@@ -1,0 +1,176 @@
+{
+  "entities": {
+    "Counter": {
+      "title": "Counter",
+      "description": "Daily sequence counter for atomic POS order numbers",
+      "type": "object",
+      "properties": {
+        "sequence": {
+          "type": "number",
+          "description": "Current order sequence number for the day"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["sequence"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Restaurant menu item with pricing and portion options",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "price": { "type": "number" },
+        "category": { "type": "string" },
+        "active": { "type": "boolean" },
+        "portions": { "type": "array" },
+        "ingredients": { "type": "array" }
+      },
+      "required": ["name", "price"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "Restaurant customer order and payment record",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string" },
+        "orderNumber": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "status": {
+          "type": "string",
+          "enum": ["preparing", "ready", "served", "completed", "cancelled"]
+        },
+        "orderType": { "type": "string" },
+        "items": { "type": "array" },
+        "createdBy": { "type": "string" },
+        "baghdadDate": { "type": "string" }
+      },
+      "required": ["orderId", "totalAmount", "status", "createdBy"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Operational expense entry",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "amount": { "type": "number" },
+        "category": { "type": "string" },
+        "note": { "type": "string" },
+        "createdBy": { "type": "string" },
+        "baghdadDate": { "type": "string" }
+      },
+      "required": ["amount", "category", "createdBy"]
+    },
+    "Shift": {
+      "title": "Shift",
+      "description": "Register operational shift and cash drawer reconciliation",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "closed"] },
+        "openedBy": { "type": "string" },
+        "openingCash": { "type": "number" },
+        "baghdadDate": { "type": "string" }
+      },
+      "required": ["status", "openedBy", "openingCash"]
+    },
+    "CashMovement": {
+      "title": "CashMovement",
+      "description": "Cash In / Cash Out drawer movement log",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string", "enum": ["cash_in", "cash_out"] },
+        "amount": { "type": "number" },
+        "reason": { "type": "string" },
+        "shiftId": { "type": "string" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["type", "amount", "reason", "shiftId", "createdBy"]
+    },
+    "DailyClosing": {
+      "title": "DailyClosing",
+      "description": "End-of-day register closure summary",
+      "type": "object",
+      "properties": {
+        "businessDate": { "type": "string" },
+        "status": { "type": "string", "enum": ["closed"] },
+        "totalSales": { "type": "number" },
+        "totalExpenses": { "type": "number" },
+        "netProfit": { "type": "number" },
+        "closedBy": { "type": "string" }
+      },
+      "required": ["businessDate", "status", "totalSales", "totalExpenses", "netProfit", "closedBy"]
+    },
+    "Ingredient": {
+      "title": "Ingredient",
+      "description": "Inventory raw material and stock level",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "unit": { "type": "string" },
+        "currentStock": { "type": "number" },
+        "minimumStock": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["name", "unit", "currentStock", "minimumStock"]
+    },
+    "StockMovement": {
+      "title": "StockMovement",
+      "description": "Stock change transaction record",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "ingredientId": { "type": "string" },
+        "type": { "type": "string", "enum": ["stock_in", "stock_adjustment", "consumption"] },
+        "quantity": { "type": "number" },
+        "reason": { "type": "string" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["ingredientId", "type", "quantity"]
+    }
+  },
+  "firestore": {
+    "/counters/{counterId}": {
+      "schema": { "$ref": "#/entities/Counter" },
+      "description": "Atomic daily order number counters"
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Restaurant menu items and pricing"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Restaurant orders and billing"
+    },
+    "/expenses/{expenseId}": {
+      "schema": { "$ref": "#/entities/Expense" },
+      "description": "Restaurant operational expenses"
+    },
+    "/shifts/{shiftId}": {
+      "schema": { "$ref": "#/entities/Shift" },
+      "description": "Cashier shifts and cash reconciliation"
+    },
+    "/cashMovements/{movementId}": {
+      "schema": { "$ref": "#/entities/CashMovement" },
+      "description": "Manual cash adjustments within shifts"
+    },
+    "/dailyClosings/{businessDate}": {
+      "schema": { "$ref": "#/entities/DailyClosing" },
+      "description": "Daily end-of-day register closure"
+    },
+    "/ingredients/{ingredientId}": {
+      "schema": { "$ref": "#/entities/Ingredient" },
+      "description": "Raw ingredients and inventory tracking"
+    },
+    "/stockMovements/{movementId}": {
+      "schema": { "$ref": "#/entities/StockMovement" },
+      "description": "Inventory movement audit trails"
+    }
+  }
+}

@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Order, OrderStatus } from '../../types/order';
 import { usePOSRealtime } from '../../contexts/POSRealtimeContext';
 import { useAuth } from '../../contexts/AuthContext';
+import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { formatIQD } from '../../utils/currency';
 import { formatBaghdadTime } from '../../utils/dates';
 import { useToast } from '../../hooks/useToast';
@@ -54,6 +55,7 @@ export const OrderPreparationQueue: React.FC = () => {
 
   const { role } = useAuth();
   const { success, error, warning } = useToast();
+  const { isOnline } = useNetworkStatus();
 
   const [filterStatus, setFilterStatus] = useState<'all' | 'preparing' | 'ready' | 'served'>('all');
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
@@ -80,6 +82,10 @@ export const OrderPreparationQueue: React.FC = () => {
   }, [filterStatus, activeOrders, preparingOrders, readyOrders, servedOrders]);
 
   const handleMarkReady = async (order: Order) => {
+    if (!isOnline) {
+      error('پەیوەندی ئینتەرنێت پچڕاوە. ناتوانرێت دۆخی داواکاری بگۆڕدرێت.');
+      return;
+    }
     try {
       setUpdatingOrderId(order.orderId);
       await markOrderReady(order.orderId);
@@ -96,6 +102,10 @@ export const OrderPreparationQueue: React.FC = () => {
   };
 
   const handleMarkServed = async (order: Order) => {
+    if (!isOnline) {
+      error('پەیوەندی ئینتەرنێت پچڕاوە. ناتوانرێت دۆخی داواکاری بگۆڕدرێت.');
+      return;
+    }
     try {
       setUpdatingOrderId(order.orderId);
       await markOrderServed(order.orderId);
@@ -112,6 +122,10 @@ export const OrderPreparationQueue: React.FC = () => {
   };
 
   const handleCompleteOrder = async (order: Order) => {
+    if (!isOnline) {
+      error('پەیوەندی ئینتەرنێت پچڕاوە. ناتوانرێت داواکاری تەواو بکرێت.');
+      return;
+    }
     try {
       setUpdatingOrderId(order.orderId);
       await completeOrder(order.orderId);
@@ -134,6 +148,10 @@ export const OrderPreparationQueue: React.FC = () => {
 
   const handleConfirmCancel = async () => {
     if (!cancelModalOrder) return;
+    if (!isOnline) {
+      error('پەیوەندی ئینتەرنێت پچڕاوە. ناتوانرێت داواکاری هەڵبوەشێنرێتەوە.');
+      return;
+    }
     if (!cancelReason.trim()) {
       error('تکایە هۆکاری هەڵوەشاندنەوە بنووسە یان دیاری بکە');
       return;

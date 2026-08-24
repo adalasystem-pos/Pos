@@ -112,8 +112,18 @@ export function listenIngredients(
       callback(list);
     },
     (error) => {
-      if (onError) onError(error);
-      handleFirestoreError(error, OperationType.LIST, path);
+      const errInfo: FirestoreErrorInfo = {
+        error: error instanceof Error ? error.message : String(error),
+        authInfo: {
+          userId: auth.currentUser?.uid,
+          email: auth.currentUser?.email,
+          emailVerified: auth.currentUser?.emailVerified,
+        },
+        operationType: OperationType.LIST,
+        path,
+      };
+      console.error('Firestore Error: ', JSON.stringify(errInfo));
+      if (onError) onError(error instanceof Error ? error : new Error(String(error)));
     }
   );
 }
@@ -402,7 +412,8 @@ export async function getStockMovements(
 export function listenStockMovements(
   callback: (movements: StockMovement[]) => void,
   ingredientId?: string,
-  limitCount: number = 50
+  limitCount: number = 50,
+  onError?: (err: Error) => void
 ) {
   const path = STOCK_MOVEMENTS_COLLECTION;
   const colRef = collection(db, path);
@@ -421,7 +432,18 @@ export function listenStockMovements(
       callback(list);
     },
     (error) => {
-      handleFirestoreError(error, OperationType.LIST, path);
+      const errInfo: FirestoreErrorInfo = {
+        error: error instanceof Error ? error.message : String(error),
+        authInfo: {
+          userId: auth.currentUser?.uid,
+          email: auth.currentUser?.email,
+          emailVerified: auth.currentUser?.emailVerified,
+        },
+        operationType: OperationType.LIST,
+        path,
+      };
+      console.error('Firestore Error: ', JSON.stringify(errInfo));
+      if (onError) onError(error instanceof Error ? error : new Error(String(error)));
     }
   );
 }

@@ -77,54 +77,53 @@ export const InventoryProvider: React.FC<{ children: React.ReactNode }> = ({ chi
     return lowStockIngredients.length;
   }, [lowStockIngredients]);
 
+  const checkOnlineAndAuth = useCallback(() => {
+    if (!user) {
+      throw new Error('پێویستە چووبیتە ژوورەوە بۆ ئەنجامدانی کرداری کۆگا');
+    }
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      throw new Error('پەیوەندی ئینتەرنێت بەردەست نییە. ناتوانرێت کرداری کۆگا ئەنجام بدرێت.');
+    }
+  }, [user]);
+
   const addIngredient = useCallback(
     async (input: CreateIngredientInput): Promise<Ingredient> => {
-      if (!user) {
-        throw new Error('پێویستە چووبیتە ژوورەوە بۆ زیادکردنی پێکهاتە');
-      }
-      return createIngredient(input, user.uid, user.email || 'بەڕێوەبەر');
+      checkOnlineAndAuth();
+      return createIngredient(input, user!.uid, user!.email || 'بەڕێوەبەر');
     },
-    [user]
+    [user, checkOnlineAndAuth]
   );
 
   const editIngredient = useCallback(
     async (id: string, updates: UpdateIngredientInput): Promise<void> => {
-      if (!user) {
-        throw new Error('پێویستە چووبیتە ژوورەوە بۆ دەستکاریکردنی پێکهاتە');
-      }
-      return updateIngredient(id, updates, user.uid);
+      checkOnlineAndAuth();
+      return updateIngredient(id, updates, user!.uid);
     },
-    [user]
+    [user, checkOnlineAndAuth]
   );
 
   const toggleActive = useCallback(
     async (id: string, currentActive: boolean): Promise<void> => {
-      if (!user) {
-        throw new Error('پێویستە چووبیتە ژوورەوە بۆ گۆڕینی دۆخ');
-      }
-      return toggleIngredientActive(id, currentActive, user.uid);
+      checkOnlineAndAuth();
+      return toggleIngredientActive(id, currentActive, user!.uid);
     },
-    [user]
+    [user, checkOnlineAndAuth]
   );
 
   const stockIn = useCallback(
     async (input: StockInInput): Promise<void> => {
-      if (!user) {
-        throw new Error('پێویستە چووبیتە ژوورەوە بۆ زیادکردنی کۆگا');
-      }
-      return addStockIn(input, user.uid, user.email || 'بەڕێوەبەر');
+      checkOnlineAndAuth();
+      return addStockIn(input, user!.uid, user!.email || 'بەڕێوەبەر');
     },
-    [user]
+    [user, checkOnlineAndAuth]
   );
 
   const adjustStock = useCallback(
     async (input: StockAdjustmentInput): Promise<void> => {
-      if (!user) {
-        throw new Error('پێویستە چووبیتە ژوورەوە بۆ دەستکاریکردنی کۆگا');
-      }
-      return serviceAdjustStock(input, user.uid, user.email || 'بەڕێوەبەر');
+      checkOnlineAndAuth();
+      return serviceAdjustStock(input, user!.uid, user!.email || 'بەڕێوەبەر');
     },
-    [user]
+    [user, checkOnlineAndAuth]
   );
 
   const getIngredientById = useCallback(

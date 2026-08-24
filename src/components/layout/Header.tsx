@@ -1,11 +1,13 @@
 import React from 'react';
 import { useAuth } from '../../hooks/useAuth';
+import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { APP_CONFIG } from '../../config/appConfig';
-import { Flame, LogOut, User as UserIcon, Clock, ShieldCheck } from 'lucide-react';
+import { Flame, LogOut, User as UserIcon, Clock, Download, Smartphone } from 'lucide-react';
 import { getBaghdadDateString, formatBaghdadTime } from '../../utils/dates';
 
 export const Header: React.FC = () => {
-  const { user, displayName, role, logout } = useAuth();
+  const { displayName, role, logout } = useAuth();
+  const { isInstallable, isInstalled, promptInstall } = usePWAInstall();
   const [currentTime, setCurrentTime] = React.useState(formatBaghdadTime(new Date()));
   const baghdadDate = getBaghdadDateString();
 
@@ -54,7 +56,31 @@ export const Header: React.FC = () => {
       </div>
 
       {/* User profile & actions */}
-      <div className="flex items-center gap-3 sm:gap-5">
+      <div className="flex items-center gap-2.5 sm:gap-4">
+        {/* PWA Install Button if available */}
+        {isInstallable && (
+          <button
+            id="header-pwa-install-btn"
+            type="button"
+            onClick={() => promptInstall()}
+            title="دامەزراندنی سیستەم وەک ئەپ"
+            className="flex items-center gap-1.5 text-xs text-orange-700 bg-orange-50 hover:bg-orange-100 border border-orange-200 px-2.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer shadow-2xs active:scale-95"
+          >
+            <Download className="w-3.5 h-3.5 text-orange-600" />
+            <span className="hidden md:inline">دامەزراندنی ئەپ</span>
+          </button>
+        )}
+
+        {isInstalled && (
+          <div
+            title="ئەپەکە لە دۆخی سەربەخۆ دامەزراوە (Standalone PWA)"
+            className="hidden lg:flex items-center gap-1 text-[11px] text-green-700 bg-green-50 border border-green-200 px-2 py-1 rounded-xl font-bold"
+          >
+            <Smartphone className="w-3 h-3 text-green-600" />
+            <span>PWA ئەپ</span>
+          </div>
+        )}
+
         <div className="flex items-center gap-2.5">
           <div className="text-left hidden sm:block">
             <div className="flex items-center gap-1 justify-end">

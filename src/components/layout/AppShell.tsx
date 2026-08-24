@@ -4,6 +4,8 @@ import { SidebarNavigation } from '../navigation/SidebarNavigation';
 import { Header } from './Header';
 import { NetworkBanner } from '../ui/NetworkBanner';
 import { ToastContainer } from '../ui/Toast';
+import { PWAInstallBanner } from '../pwa/PWAInstallBanner';
+import { PWAUpdateNotification } from '../pwa/PWAUpdateNotification';
 import { useCart } from '../../hooks/useCart';
 
 interface AppShellProps {
@@ -26,6 +28,7 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen pb-24 md:pb-6">
+        <PWAInstallBanner />
         <NetworkBanner />
         <Header />
 
@@ -40,6 +43,9 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, onSelectTab, chil
         onSelectTab={onSelectTab}
         cartCount={itemCount}
       />
+
+      {/* PWA Update Notification */}
+      <PWAUpdateNotification />
 
       {/* Toast Notifications */}
       <ToastContainer />
