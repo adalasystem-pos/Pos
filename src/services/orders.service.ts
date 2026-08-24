@@ -11,7 +11,14 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { CartItem, Order, OrderStatus, OrderSource, KitchenPrintStatus } from '../types/order';
+import {
+  CartItem,
+  Order,
+  OrderStatus,
+  OrderSource,
+  KitchenPrintStatus,
+  OrderStatusHistoryItem,
+} from '../types/order';
 import { calculateLineTotal, calculateOrderTotal } from '../utils/calculations';
 import { validateCart } from '../utils/validation';
 import { getBaghdadDateString, getBaghdadDayRange } from '../utils/dates';
@@ -26,6 +33,12 @@ export interface CreateOrderParams {
   source?: OrderSource;
   userId: string;
   userName?: string;
+}
+
+export interface TransitionUser {
+  uid: string;
+  name?: string;
+  role?: string;
 }
 
 /**
@@ -101,6 +114,14 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
 
       const orderNumber = `#${sequence.toString().padStart(3, '0')}`;
 
+      const initialHistoryItem: OrderStatusHistoryItem = {
+        status: 'preparing',
+        changedAt: new Date().toISOString(),
+        changedBy: userId,
+        changedByName: userName,
+        note: 'دروستکردنی داواکاری لە سیستەم',
+      };
+
       // 4. Construct authoritative Order payload
       const orderPayload = {
         orderId: newOrderDoc.id,
@@ -114,6 +135,8 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
         status: 'preparing' as const,
         kitchenPrintStatus: 'pending' as KitchenPrintStatus,
         kitchenPrintAttempts: 0,
+        statusHistory: [initialHistoryItem],
+        preparingAt: serverTimestamp(),
         createdAt: serverTimestamp(),
         createdBy: userId,
         createdByName: userName,
@@ -126,6 +149,7 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
       return {
         ...orderPayload,
         createdAt: new Date(),
+        preparingAt: new Date(),
       };
     });
 
@@ -134,6 +158,141 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
     console.error('Error creating order in transaction:', error);
     throw error;
   }
+}
+
+/**
+ * Validates if a status transition is permitted by restaurant operations rules.
+ */
+export function isValidStatusTransition(
+  currentStatus: OrderStatus,
+  targetStatus: OrderStatus
+): boolean {
+  if (currentStatus === targetStatus) return false;
+
+  switch (currentStatus) {
+    case 'preparing':
+      return targetStatus === 'ready' || targetStatus === 'cancelled';
+    case 'ready':
+      return targetStatus === 'served' || targetStatus === 'cancelled';
+    case 'served':
+      return targetStatus === 'completed';
+    case 'completed':
+    case 'cancelled':
+    default:
+      // Terminal states cannot be changed arbitrarily
+      return false;
+  }
+}
+
+/**
+ * Authoritatively executes an atomic status transition on an order with status history.
+ */
+export async function transitionOrderStatus(
+  orderId: string,
+  targetStatus: OrderStatus,
+  user: TransitionUser,
+  cancelReason?: string
+): Promise<void> {
+  if (!orderId) throw new Error('ناسنامەی داواکاری نادروستە');
+  if (!user || !user.uid) throw new Error('دەبێت بەکارهێنەر دیاری بکرێت');
+
+  if (targetStatus === 'cancelled' && (!cancelReason || !cancelReason.trim())) {
+    throw new Error('دەبێت هۆکاری هەڵوەشاندنەوە بنووسرێت');
+  }
+
+  const orderDocRef = doc(db, ORDERS_COLLECTION, orderId);
+
+  await runTransaction(db, async (transaction) => {
+    const snap = await transaction.get(orderDocRef);
+    if (!snap.exists()) {
+      throw new Error('داواکارییەکە لە سیستەم نەدۆزرایەوە');
+    }
+
+    const orderData = snap.data() as Order;
+    const currentStatus = orderData.status || 'preparing';
+
+    if (!isValidStatusTransition(currentStatus, targetStatus)) {
+      throw new Error(
+        `گۆڕینی دۆخی داواکاری لە (${currentStatus}) بۆ (${targetStatus}) ڕێگەپێدراو نییە`
+      );
+    }
+
+    const existingHistory = Array.isArray(orderData.statusHistory)
+      ? [...orderData.statusHistory]
+      : [];
+
+    const newHistoryItem: OrderStatusHistoryItem = {
+      status: targetStatus,
+      changedAt: new Date().toISOString(),
+      changedBy: user.uid,
+      changedByName: user.name || 'کارمەند',
+      note: cancelReason ? cancelReason.trim() : undefined,
+    };
+
+    const updatePayload: Record<string, any> = {
+      status: targetStatus,
+      statusHistory: [...existingHistory, newHistoryItem],
+      updatedAt: serverTimestamp(),
+    };
+
+    if (targetStatus === 'ready') {
+      updatePayload.readyAt = serverTimestamp();
+    } else if (targetStatus === 'served') {
+      updatePayload.servedAt = serverTimestamp();
+    } else if (targetStatus === 'completed') {
+      updatePayload.completedAt = serverTimestamp();
+    } else if (targetStatus === 'cancelled') {
+      updatePayload.cancelledAt = serverTimestamp();
+      updatePayload.cancelledBy = user.uid;
+      updatePayload.cancelledByName = user.name || 'کارمەند';
+      updatePayload.cancelReason = cancelReason?.trim() || '';
+    }
+
+    transaction.update(orderDocRef, updatePayload);
+  });
+}
+
+/**
+ * Convenient wrappers for operational lifecycle transitions
+ */
+export async function markOrderReady(orderId: string, user: TransitionUser): Promise<void> {
+  return transitionOrderStatus(orderId, 'ready', user);
+}
+
+export async function markOrderServed(orderId: string, user: TransitionUser): Promise<void> {
+  return transitionOrderStatus(orderId, 'served', user);
+}
+
+export async function completeOrder(orderId: string, user: TransitionUser): Promise<void> {
+  return transitionOrderStatus(orderId, 'completed', user);
+}
+
+export async function cancelOrder(
+  orderId: string,
+  reason: string,
+  user: TransitionUser
+): Promise<void> {
+  return transitionOrderStatus(orderId, 'cancelled', user, reason);
+}
+
+/**
+ * Backward compatible updateOrderStatus wrapper
+ */
+export async function updateOrderStatus(
+  orderId: string,
+  status: OrderStatus,
+  user?: TransitionUser,
+  cancelReason?: string
+): Promise<void> {
+  if (user) {
+    return transitionOrderStatus(orderId, status, user, cancelReason);
+  }
+  if (!orderId) throw new Error('Invalid order ID');
+  const orderDocRef = doc(db, ORDERS_COLLECTION, orderId);
+  await updateDoc(orderDocRef, {
+    status,
+    updatedAt: serverTimestamp(),
+  });
 }
 
 /**
@@ -151,7 +310,7 @@ export async function claimOrderForPrinting(orderId: string): Promise<boolean> {
 
       const data = snap.data() as Order;
 
-      // Only claim if status is 'preparing' (or completed) and print status is pending or failed
+      // Only claim if print status is pending or failed
       const currentPrintStatus = data.kitchenPrintStatus || 'pending';
       if (currentPrintStatus === 'printing' || currentPrintStatus === 'printed') {
         return false;
@@ -225,20 +384,8 @@ export async function markOrderPrintResult(orderId: string, success: boolean): P
 }
 
 /**
- * Updates an order status (e.g. marking preparing -> completed)
- */
-export async function updateOrderStatus(orderId: string, status: OrderStatus): Promise<void> {
-  if (!orderId) throw new Error('Invalid order ID');
-  const orderDocRef = doc(db, ORDERS_COLLECTION, orderId);
-  await updateDoc(orderDocRef, {
-    status,
-    updatedAt: serverTimestamp(),
-  });
-}
-
-/**
  * Retrieves orders for a specific Baghdad business day.
- * Includes all active orders (preparing, completed, and legacy orders).
+ * Excludes cancelled orders from financial calculations by default.
  */
 export async function getTodayOrders(targetDateStr?: string): Promise<Order[]> {
   const dateStr = targetDateStr || getBaghdadDateString();
@@ -252,6 +399,7 @@ export async function getTodayOrders(targetDateStr?: string): Promise<Order[]> {
     const orders: Order[] = [];
     snapshot.forEach((d) => {
       const ord = d.data() as Order;
+      // Exclude cancelled orders from financial totals
       if (ord.status !== 'cancelled') {
         orders.push(ord);
       }
@@ -283,7 +431,8 @@ export async function getTodayOrders(targetDateStr?: string): Promise<Order[]> {
 }
 
 /**
- * Real-time listener for today's active orders (preparing, completed, and legacy).
+ * Real-time listener for today's active orders (preparing, ready, served, completed).
+ * Excludes cancelled orders from standard sales lists.
  */
 export function listenTodayOrders(
   callback: (orders: Order[]) => void,
@@ -318,32 +467,36 @@ export function listenTodayOrders(
 }
 
 /**
- * Real-time listener for active preparing orders (status == 'preparing')
+ * Real-time listener for all active operational orders (status in ['preparing', 'ready', 'served'])
  */
-export function listenActivePreparingOrders(
+export function listenActiveOperationalOrders(
   callback: (orders: Order[]) => void,
   targetDateStr?: string,
   onError?: (err: Error) => void
 ) {
   const dateStr = targetDateStr || getBaghdadDateString();
   const ordersRef = collection(db, ORDERS_COLLECTION);
-  const q = query(
-    ordersRef,
-    where('baghdadDate', '==', dateStr),
-    where('status', '==', 'preparing')
-  );
+  const q = query(ordersRef, where('baghdadDate', '==', dateStr));
 
   return onSnapshot(
     q,
     (snapshot) => {
       const orders: Order[] = [];
       snapshot.forEach((d) => {
-        orders.push(d.data() as Order);
+        const ord = d.data() as Order;
+        // Include only active workflow states
+        if (
+          ord.status === 'preparing' ||
+          ord.status === 'ready' ||
+          ord.status === 'served'
+        ) {
+          orders.push(ord);
+        }
       });
       orders.sort((a, b) => {
         const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
         const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
-        return timeA - timeB; // Oldest preparing order first for kitchen queue
+        return timeA - timeB; // Oldest active order first for operational queue
       });
       callback(orders);
     },

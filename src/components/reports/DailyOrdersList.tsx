@@ -4,7 +4,7 @@ import { formatIQD } from '../../utils/currency';
 import { formatBaghdadTime } from '../../utils/dates';
 import { Card } from '../ui/Card';
 import { EmptyState } from '../ui/EmptyState';
-import { ShoppingBag, Clock, User, CheckCircle2, Utensils } from 'lucide-react';
+import { ShoppingBag, Clock, User, CheckCircle2, Utensils, Send, XCircle } from 'lucide-react';
 
 interface DailyOrdersListProps {
   orders: Order[];
@@ -16,11 +16,52 @@ export const DailyOrdersList: React.FC<DailyOrdersListProps> = ({ orders, loadin
     return (
       <EmptyState
         title="هیچ فرۆشێک تۆمار نەکراوە"
-        description="هەر داواکارییەکی تەواوکراو لە POS لێرەدا دەردەکەوێت."
+        description="هەر داواکارییەکی تۆمارکراو لە سیستەم لێرەدا دەردەکەوێت."
         icon={<ShoppingBag className="w-8 h-8" />}
       />
     );
   }
+
+  const renderStatusBadge = (order: Order) => {
+    switch (order.status) {
+      case 'preparing':
+        return (
+          <span className="flex items-center gap-1 text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
+            <Utensils className="w-3.5 h-3.5 text-amber-600" />
+            <span>لە ئامادەکردندایە</span>
+          </span>
+        );
+      case 'ready':
+        return (
+          <span className="flex items-center gap-1 text-blue-600 font-bold bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-200">
+            <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
+            <span>ئامادەیە</span>
+          </span>
+        );
+      case 'served':
+        return (
+          <span className="flex items-center gap-1 text-teal-600 font-bold bg-teal-50 px-2 py-0.5 rounded-lg border border-teal-200">
+            <Send className="w-3.5 h-3.5 text-teal-600" />
+            <span>گەیەنراوە</span>
+          </span>
+        );
+      case 'cancelled':
+        return (
+          <span className="flex items-center gap-1 text-red-600 font-bold bg-red-50 px-2 py-0.5 rounded-lg border border-red-200">
+            <XCircle className="w-3.5 h-3.5 text-red-600" />
+            <span>هەڵوەشاوەتەوە</span>
+          </span>
+        );
+      case 'completed':
+      default:
+        return (
+          <span className="flex items-center gap-1 text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+            <span>تەواوکراو</span>
+          </span>
+        );
+    }
+  };
 
   return (
     <div className="space-y-2.5">
@@ -33,7 +74,7 @@ export const DailyOrdersList: React.FC<DailyOrdersListProps> = ({ orders, loadin
           {/* Top row: Order Number, Table, Time, Cashier, Amount */}
           <div className="flex items-start justify-between gap-2 pb-3 border-b border-orange-50">
             <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs font-black bg-orange-100 text-orange-900 px-2.5 py-0.5 rounded-xl border border-orange-200 font-mono">
+              <span className="text-xs font-black bg-orange-100 text-orange-950 px-2.5 py-0.5 rounded-xl border border-orange-200 font-mono">
                 {order.orderNumber || `#${orders.length - idx}`}
               </span>
               {order.tableNumber && (
@@ -53,7 +94,10 @@ export const DailyOrdersList: React.FC<DailyOrdersListProps> = ({ orders, loadin
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="text-xs sm:text-sm font-black text-orange-600 bg-orange-50 px-3 py-1 rounded-xl border border-orange-100 font-mono" dir="ltr">
+              <span
+                className="text-xs sm:text-sm font-black text-orange-600 bg-orange-50 px-3 py-1 rounded-xl border border-orange-100 font-mono"
+                dir="ltr"
+              >
                 {formatIQD(order.totalAmount)}
               </span>
             </div>
@@ -90,25 +134,21 @@ export const DailyOrdersList: React.FC<DailyOrdersListProps> = ({ orders, loadin
                 تێبینی: {order.note}
               </p>
             )}
+
+            {order.status === 'cancelled' && order.cancelReason && (
+              <p className="text-[11px] text-red-500 font-medium pt-1 border-t border-red-50 mt-1">
+                هۆکاری هەڵوەشاندنەوە: {order.cancelReason}
+              </p>
+            )}
           </div>
 
-          {/* Bottom user attribution */}
+          {/* Bottom user attribution & status */}
           <div className="flex items-center justify-between text-[10px] text-gray-400 pt-2.5 border-t border-orange-50 mt-2.5 font-medium">
             <span className="flex items-center gap-1">
               <User className="w-3.5 h-3.5" />
-              <span>کاشێر: {order.createdByName || 'کاشێر'}</span>
+              <span>تۆمارکار: {order.createdByName || 'کاشێر'}</span>
             </span>
-            {order.status === 'preparing' ? (
-              <span className="flex items-center gap-1 text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded-lg border border-amber-200">
-                <Utensils className="w-3.5 h-3.5 text-amber-600" />
-                <span>لە ئامادەکردندایە</span>
-              </span>
-            ) : (
-              <span className="flex items-center gap-1 text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                <span>تەواوکراو</span>
-              </span>
-            )}
+            {renderStatusBadge(order)}
           </div>
         </Card>
       ))}

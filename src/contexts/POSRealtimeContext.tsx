@@ -1,10 +1,13 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { Order } from '../types/order';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { Order, OrderStatus } from '../types/order';
 import { useAuth } from './AuthContext';
 import { useToast } from '../hooks/useToast';
 import {
-  listenActivePreparingOrders,
-  updateOrderStatus,
+  listenActiveOperationalOrders,
+  markOrderReady as serviceMarkOrderReady,
+  markOrderServed as serviceMarkOrderServed,
+  completeOrder as serviceCompleteOrder,
+  cancelOrder as serviceCancelOrder,
   claimOrderForPrinting,
   claimOrderForReprint,
   markOrderPrintResult,
@@ -14,10 +17,19 @@ import { playOrderNotificationChime } from '../utils/sound';
 import { formatIQD } from '../utils/currency';
 
 interface POSRealtimeContextType {
+  activeOrders: Order[];
   preparingOrders: Order[];
+  readyOrders: Order[];
+  servedOrders: Order[];
   preparingCount: number;
+  readyCount: number;
+  servedCount: number;
+  totalActiveCount: number;
   loading: boolean;
+  markOrderReady: (orderId: string) => Promise<void>;
+  markOrderServed: (orderId: string) => Promise<void>;
   completeOrder: (orderId: string) => Promise<void>;
+  cancelOrder: (orderId: string, reason: string) => Promise<void>;
   reprintOrder: (order: Order) => Promise<PrintResult>;
   printerStatus: PrinterStatus;
   printerEnvironment: PrinterEnvironment;
@@ -27,16 +39,17 @@ interface POSRealtimeContextType {
 const POSRealtimeContext = createContext<POSRealtimeContextType | undefined>(undefined);
 
 export const POSRealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { user, role } = useAuth();
-  const { showToast, warning } = useToast();
+  const { user, role, displayName } = useAuth();
+  const { showToast, warning, success, error: toastError } = useToast();
 
-  const [preparingOrders, setPreparingOrders] = useState<Order[]>([]);
+  const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus>('unavailable');
   const [printerEnvironment, setPrinterEnvironment] = useState<PrinterEnvironment>('browser-unsupported');
 
   const isFirstLoadRef = useRef<boolean>(true);
   const knownOrderIdsRef = useRef<Set<string>>(new Set());
+  const knownStatusMapRef = useRef<Map<string, OrderStatus>>(new Map());
 
   // Check and update printer environment & status
   const refreshPrinterStatus = useCallback(async (): Promise<PrinterStatus> => {
@@ -52,77 +65,96 @@ export const POSRealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ c
     iminPrinter.initialize();
   }, [refreshPrinterStatus]);
 
-  // Centralized Realtime Listener for active preparing orders
+  // Centralized Realtime Listener for active operational orders
   useEffect(() => {
     if (!user) {
-      setPreparingOrders([]);
+      setActiveOrders([]);
       setLoading(false);
       return;
     }
 
     setLoading(true);
 
-    const unsubscribe = listenActivePreparingOrders(
-      async (activeOrders) => {
-        setPreparingOrders(activeOrders);
+    const unsubscribe = listenActiveOperationalOrders(
+      async (orders) => {
+        setActiveOrders(orders);
         setLoading(false);
 
         // 1. Initial Snapshot Protection:
-        // Do NOT auto-notify or auto-print existing historical orders on initial application load.
+        // Populate known IDs and statuses without triggering notifications on first page load
         if (isFirstLoadRef.current) {
-          activeOrders.forEach((ord) => knownOrderIdsRef.current.add(ord.orderId));
+          orders.forEach((ord) => {
+            knownOrderIdsRef.current.add(ord.orderId);
+            knownStatusMapRef.current.set(ord.orderId, ord.status);
+          });
           isFirstLoadRef.current = false;
           return;
         }
 
-        // 2. Captain Role Isolation:
-        // Captain devices must never play kitchen chime or attempt automatic POS printing.
-        if (role === 'captain') {
-          activeOrders.forEach((ord) => knownOrderIdsRef.current.add(ord.orderId));
-          return;
-        }
-
-        // 3. Detect newly arrived orders for POS operator
-        const newlyArrivedOrders = activeOrders.filter(
-          (ord) => !knownOrderIdsRef.current.has(ord.orderId)
-        );
-
-        for (const newOrd of newlyArrivedOrders) {
-          knownOrderIdsRef.current.add(newOrd.orderId);
-
-          // Audio alert
-          playOrderNotificationChime();
+        // 2. Process order updates and transitions
+        for (const ord of orders) {
+          const prevStatus = knownStatusMapRef.current.get(ord.orderId);
+          const isNewlyArrived = !knownOrderIdsRef.current.has(ord.orderId);
 
           const orderNum =
-            newOrd.orderNumber ||
-            (newOrd.orderId ? `#${newOrd.orderId.slice(-4).toUpperCase()}` : '#001');
-          const tableMsg = newOrd.tableNumber ? ` • مێز: ${newOrd.tableNumber}` : '';
-          const sourceMsg = newOrd.source === 'captain' ? ' (لە کاپتنەوە)' : '';
+            ord.orderNumber ||
+            (ord.orderId ? `#${ord.orderId.slice(-4).toUpperCase()}` : '#001');
+          const tableMsg = ord.tableNumber ? ` • مێز: ${ord.tableNumber}` : '';
 
-          // POS Notification Banner
-          showToast(
-            `ژمارەی داواکاری: ${orderNum}${tableMsg}${sourceMsg} • کۆ: ${formatIQD(newOrd.totalAmount)}`,
-            'info',
-            'داواکارییەکی نوێ هات!',
-            6000
-          );
+          if (isNewlyArrived) {
+            knownOrderIdsRef.current.add(ord.orderId);
+            knownStatusMapRef.current.set(ord.orderId, ord.status);
 
-          // 4. POS Atomic Print Claim & Execution
-          // Only the POS attempts atomic print claim
-          try {
-            const claimed = await claimOrderForPrinting(newOrd.orderId);
-            if (claimed) {
-              const printRes = await iminPrinter.printReceipt(newOrd, false);
-              await markOrderPrintResult(newOrd.orderId, printRes.success);
-              if (!printRes.success && printRes.status !== 'ready') {
-                if (printRes.status === 'paper-missing') {
-                  warning('کاغەزی چاپکەر نەماوە (Paper Missing)');
+            // Audio alert & Auto-Print strictly for POS/Cashier on brand new order creation
+            if (role !== 'captain') {
+              playOrderNotificationChime();
+              const sourceMsg = ord.source === 'captain' ? ' (لە کاپتنەوە)' : '';
+
+              showToast(
+                `ژمارەی داواکاری: ${orderNum}${tableMsg}${sourceMsg} • کۆ: ${formatIQD(ord.totalAmount)}`,
+                'info',
+                'داواکارییەکی نوێ هات!',
+                6000
+              );
+
+              // POS Atomic Print Claim & Execution (Only on initial creation)
+              try {
+                const claimed = await claimOrderForPrinting(ord.orderId);
+                if (claimed) {
+                  const printRes = await iminPrinter.printReceipt(ord, false);
+                  await markOrderPrintResult(ord.orderId, printRes.success);
+                  if (!printRes.success && printRes.status !== 'ready') {
+                    if (printRes.status === 'paper-missing') {
+                      warning('کاغەزی چاپکەر نەماوە (Paper Missing)');
+                    }
+                  }
                 }
+              } catch (printErr) {
+                console.error('POS automatic print error:', printErr);
+                await markOrderPrintResult(ord.orderId, false);
               }
             }
-          } catch (printErr) {
-            console.error('POS automatic print error:', printErr);
-            await markOrderPrintResult(newOrd.orderId, false);
+          } else if (prevStatus && prevStatus !== ord.status) {
+            // Status Transition Notifications (NO automatic reprint triggered!)
+            knownStatusMapRef.current.set(ord.orderId, ord.status);
+
+            if (ord.status === 'ready') {
+              // Notify when order is ready from kitchen
+              showToast(
+                `داواکاری ${orderNum}${tableMsg} ئامادەیە بۆ پێشکەشکردن`,
+                'success',
+                'داواکاری ئامادەیە!',
+                5000
+              );
+            } else if (ord.status === 'served') {
+              // Notify when order is served to the table
+              showToast(
+                `داواکاری ${orderNum}${tableMsg} گەیەنرا بە کڕیار`,
+                'info',
+                'داواکاری گەیەنرا',
+                4000
+              );
+            }
           }
         }
       },
@@ -138,10 +170,72 @@ export const POSRealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ c
     };
   }, [user, role, showToast, warning]);
 
-  const completeOrder = useCallback(async (orderId: string) => {
-    if (!orderId) return;
-    await updateOrderStatus(orderId, 'completed');
-  }, []);
+  // Derived filtered order lists
+  const preparingOrders = useMemo(
+    () => activeOrders.filter((o) => o.status === 'preparing'),
+    [activeOrders]
+  );
+
+  const readyOrders = useMemo(
+    () => activeOrders.filter((o) => o.status === 'ready'),
+    [activeOrders]
+  );
+
+  const servedOrders = useMemo(
+    () => activeOrders.filter((o) => o.status === 'served'),
+    [activeOrders]
+  );
+
+  const markOrderReady = useCallback(
+    async (orderId: string) => {
+      if (!user) throw new Error('دەبێت بەکارهێنەر چووبێتە ژوورەوە');
+      await serviceMarkOrderReady(orderId, {
+        uid: user.uid,
+        name: displayName,
+        role,
+      });
+    },
+    [user, displayName, role]
+  );
+
+  const markOrderServed = useCallback(
+    async (orderId: string) => {
+      if (!user) throw new Error('دەبێت بەکارهێنەر چووبێتە ژوورەوە');
+      await serviceMarkOrderServed(orderId, {
+        uid: user.uid,
+        name: displayName,
+        role,
+      });
+    },
+    [user, displayName, role]
+  );
+
+  const completeOrder = useCallback(
+    async (orderId: string) => {
+      if (!user) throw new Error('دەبێت بەکارهێنەر چووبێتە ژوورەوە');
+      await serviceCompleteOrder(orderId, {
+        uid: user.uid,
+        name: displayName,
+        role,
+      });
+    },
+    [user, displayName, role]
+  );
+
+  const cancelOrder = useCallback(
+    async (orderId: string, reason: string) => {
+      if (!user) throw new Error('دەبێت بەکارهێنەر چووبێتە ژوورەوە');
+      if (!reason || !reason.trim()) {
+        throw new Error('دەبێت هۆکاری هەڵوەشاندنەوە بنووسرێت');
+      }
+      await serviceCancelOrder(orderId, reason, {
+        uid: user.uid,
+        name: displayName,
+        role,
+      });
+    },
+    [user, displayName, role]
+  );
 
   const reprintOrder = useCallback(async (order: Order): Promise<PrintResult> => {
     if (!order || !order.orderId) {
@@ -161,10 +255,19 @@ export const POSRealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }, []);
 
   const value = {
+    activeOrders,
     preparingOrders,
+    readyOrders,
+    servedOrders,
     preparingCount: preparingOrders.length,
+    readyCount: readyOrders.length,
+    servedCount: servedOrders.length,
+    totalActiveCount: activeOrders.length,
     loading,
+    markOrderReady,
+    markOrderServed,
     completeOrder,
+    cancelOrder,
     reprintOrder,
     printerStatus,
     printerEnvironment,

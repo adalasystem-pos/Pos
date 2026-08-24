@@ -10,9 +10,17 @@ export interface CartItem {
   lineTotal: number; // Integer IQD: unitPrice * quantity
 }
 
-export type OrderStatus = 'preparing' | 'completed' | 'cancelled';
+export type OrderStatus = 'preparing' | 'ready' | 'served' | 'completed' | 'cancelled';
 export type OrderSource = 'captain' | 'pos';
 export type KitchenPrintStatus = 'pending' | 'printing' | 'printed' | 'failed';
+
+export interface OrderStatusHistoryItem {
+  status: OrderStatus;
+  changedAt: any; // Firestore Timestamp
+  changedBy: string;
+  changedByName?: string;
+  note?: string;
+}
 
 export interface Order {
   orderId: string;
@@ -27,6 +35,15 @@ export interface Order {
   kitchenPrintStatus?: KitchenPrintStatus;
   kitchenPrintedAt?: any; // Firestore Timestamp
   kitchenPrintAttempts?: number;
+  statusHistory?: OrderStatusHistoryItem[];
+  preparingAt?: any;
+  readyAt?: any;
+  servedAt?: any;
+  completedAt?: any;
+  cancelledAt?: any;
+  cancelledBy?: string;
+  cancelledByName?: string;
+  cancelReason?: string;
   createdAt: any; // Firestore serverTimestamp / Timestamp
   createdBy: string; // Auth UID
   createdByName?: string;
