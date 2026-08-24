@@ -12,7 +12,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
-import { Product } from '../types/product';
+import { Product, ProductIngredient } from '../types/product';
 import { DEFAULT_PRODUCTS } from '../data/products';
 
 export const PRODUCTS_COLLECTION = 'products';
@@ -186,6 +186,7 @@ export interface CreateProductInput {
   availableCustomizations?: string[];
   imageUrl?: string;
   customId?: string;
+  ingredients?: ProductIngredient[];
 }
 
 /**
@@ -229,6 +230,9 @@ export async function createProduct(input: CreateProductInput, userId: string): 
   if (input.imageUrl) {
     payload.imageUrl = input.imageUrl;
   }
+  if (input.ingredients && Array.isArray(input.ingredients)) {
+    payload.ingredients = input.ingredients.filter((i) => i.ingredientId && i.quantity > 0);
+  }
 
   try {
     await setDoc(prodDocRef, payload);
@@ -252,6 +256,7 @@ export interface UpdateProductInput {
   customPortions?: Record<string, number>;
   availableCustomizations?: string[];
   imageUrl?: string;
+  ingredients?: ProductIngredient[];
 }
 
 /**
@@ -309,6 +314,9 @@ export async function updateProduct(
       if (input.imageUrl || defaultProd?.imageUrl) {
         initialPayload.imageUrl = input.imageUrl || defaultProd?.imageUrl;
       }
+      if (input.ingredients) {
+        initialPayload.ingredients = input.ingredients.filter((i) => i.ingredientId && i.quantity > 0);
+      }
 
       await setDoc(prodDocRef, initialPayload);
       return;
@@ -327,6 +335,9 @@ export async function updateProduct(
     if (input.customPortions !== undefined) payload.customPortions = input.customPortions;
     if (input.availableCustomizations !== undefined) payload.availableCustomizations = input.availableCustomizations;
     if (input.imageUrl !== undefined) payload.imageUrl = input.imageUrl;
+    if (input.ingredients !== undefined) {
+      payload.ingredients = input.ingredients.filter((i) => i.ingredientId && i.quantity > 0);
+    }
 
     await setDoc(prodDocRef, payload, { merge: true });
   } catch (error) {

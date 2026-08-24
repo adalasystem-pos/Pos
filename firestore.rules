@@ -94,6 +94,28 @@ service cloud.firestore {
       allow update, delete: if false; // Cannot overwrite existing closed register
     }
 
+    // Ingredients Collection: Restaurant ingredient definitions, stock units, and thresholds
+    match /ingredients/{ingredientId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && request.resource.data.name is string
+        && request.resource.data.unit is string
+        && (request.resource.data.currentStock is int || request.resource.data.currentStock is number)
+        && (request.resource.data.minimumStock is int || request.resource.data.minimumStock is number);
+      allow update: if isAuthenticated();
+      allow delete: if false; // Ingredients should be deactivated rather than deleted to preserve referential history
+    }
+
+    // Stock Movements Collection: Stock In, Stock Adjustments, and Order Consumption logs
+    match /stockMovements/{movementId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated()
+        && request.resource.data.type in ['stock_in', 'stock_adjustment', 'consumption']
+        && (request.resource.data.quantity is int || request.resource.data.quantity is number)
+        && request.resource.data.ingredientId is string;
+      allow update, delete: if false; // Immutable audit log
+    }
+
     // Default deny all other paths
     match /{document=**} {
       allow read, write: if false;

@@ -49,5 +49,7 @@ export interface Order {
   createdByName?: string;
   shiftId?: string; // Optional reference to active operational shift
   baghdadDate?: string; // YYYY-MM-DD for indexed grouping
+  inventoryProcessed?: boolean; // Duplicate deduction protection
+  inventoryProcessedAt?: any; // Firestore Timestamp
   updatedAt?: any;
 }

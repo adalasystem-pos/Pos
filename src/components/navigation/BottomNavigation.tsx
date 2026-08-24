@@ -1,5 +1,6 @@
 import React from 'react';
 import { ShoppingBag, UtensilsCrossed, Receipt, BarChart3 } from 'lucide-react';
+import { useInventory } from '../../hooks/useInventory';
 
 export type NavTab = 'pos' | 'products' | 'expenses' | 'reports';
 
@@ -14,6 +15,8 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
   onSelectTab,
   cartCount = 0,
 }) => {
+  const { lowStockCount } = useInventory();
+
   const tabs = [
     {
       id: 'pos' as NavTab,
@@ -23,8 +26,9 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
     },
     {
       id: 'products' as NavTab,
-      label: 'ئایتمەکان',
+      label: 'ئایتم و کۆگا',
       icon: UtensilsCrossed,
+      hasWarning: lowStockCount > 0,
     },
     {
       id: 'expenses' as NavTab,
@@ -66,6 +70,9 @@ export const BottomNavigation: React.FC<BottomNavigationProps> = ({
                   <span className="absolute -top-1.5 -left-2.5 bg-orange-500 text-white text-[10px] font-black px-1.5 py-0.2 rounded-full min-w-[16px] text-center border-2 border-white shadow-2xs">
                     {tab.badge}
                   </span>
+                )}
+                {tab.hasWarning && (
+                  <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-500 rounded-full border-2 border-white animate-ping" />
                 )}
               </div>
               <span className="text-[11px] mt-1 tracking-tight font-bold">{tab.label}</span>

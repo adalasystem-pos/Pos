@@ -1,7 +1,8 @@
 import React from 'react';
-import { ShoppingBag, UtensilsCrossed, Receipt, BarChart3, Flame, Shield } from 'lucide-react';
+import { ShoppingBag, UtensilsCrossed, Receipt, BarChart3, Flame, Shield, AlertTriangle } from 'lucide-react';
 import { NavTab } from './BottomNavigation';
 import { APP_CONFIG } from '../../config/appConfig';
+import { useInventory } from '../../hooks/useInventory';
 
 interface SidebarNavigationProps {
   activeTab: NavTab;
@@ -14,6 +15,8 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
   onSelectTab,
   cartCount = 0,
 }) => {
+  const { lowStockCount } = useInventory();
+
   const tabs = [
     {
       id: 'pos' as NavTab,
@@ -23,8 +26,9 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
     },
     {
       id: 'products' as NavTab,
-      label: 'بەڕێوەبردنی ئایتمەکان',
+      label: 'ئایتمەکان و کۆگا',
       icon: UtensilsCrossed,
+      warningBadge: lowStockCount > 0 ? `${lowStockCount} کەمە` : undefined,
     },
     {
       id: 'expenses' as NavTab,
@@ -87,6 +91,16 @@ export const SidebarNavigation: React.FC<SidebarNavigationProps> = ({
                   }`}
                 >
                   {tab.badge}
+                </span>
+              )}
+              {tab.warningBadge !== undefined && (
+                <span
+                  className={`text-[10px] px-2 py-0.5 rounded-full font-black flex items-center gap-1 ${
+                    isActive ? 'bg-white text-amber-600' : 'bg-amber-500 text-white animate-pulse'
+                  }`}
+                >
+                  <AlertTriangle className="w-3 h-3" />
+                  <span>{tab.warningBadge}</span>
                 </span>
               )}
             </button>

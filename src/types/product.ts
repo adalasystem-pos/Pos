@@ -18,6 +18,11 @@ export interface ProductCategory {
   sortOrder: number;
 }
 
+export interface ProductIngredient {
+  ingredientId: string;
+  quantity: number; // Quantity of ingredient required per standard portion (نەفەر)
+}
+
 export interface Product {
   id: string;
   name: string;
@@ -32,4 +37,6 @@ export interface Product {
   customPortions?: { [key in Portion]?: number }; // Specific integer override price per portion if non-standard
   availableCustomizations?: string[];
   imageUrl?: string;
+  ingredients?: ProductIngredient[]; // Ingredient recipe requirements
 }
+

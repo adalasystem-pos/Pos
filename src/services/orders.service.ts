@@ -22,6 +22,7 @@ import {
 import { calculateLineTotal, calculateOrderTotal } from '../utils/calculations';
 import { validateCart } from '../utils/validation';
 import { getBaghdadDateString, getBaghdadDayRange } from '../utils/dates';
+import { executeOrderInventoryDeduction } from './inventory.service';
 
 const ORDERS_COLLECTION = 'orders';
 const COUNTERS_COLLECTION = 'counters';
@@ -244,6 +245,8 @@ export async function transitionOrderStatus(
       updatePayload.servedAt = serverTimestamp();
     } else if (targetStatus === 'completed') {
       updatePayload.completedAt = serverTimestamp();
+      // Atomic inventory deduction with duplicate deduction protection
+      await executeOrderInventoryDeduction(transaction, orderDocRef, orderData, user.uid, user.name);
     } else if (targetStatus === 'cancelled') {
       updatePayload.cancelledAt = serverTimestamp();
       updatePayload.cancelledBy = user.uid;

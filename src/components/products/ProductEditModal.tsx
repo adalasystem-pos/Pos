@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Product, Portion } from '../../types/product';
+import { Product, Portion, ProductIngredient } from '../../types/product';
 import { DEFAULT_CATEGORIES } from '../../data/products';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { ProductRecipeEditor } from '../inventory/ProductRecipeEditor';
 import { formatIQD } from '../../utils/currency';
 import { useToast } from '../../hooks/useToast';
 import { useProducts } from '../../hooks/useProducts';
@@ -31,6 +32,7 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
   const [allowPortions, setAllowPortions] = useState<boolean>(false);
   const [halfPortionPrice, setHalfPortionPrice] = useState<number>(0);
   const [kiloPrice, setKiloPrice] = useState<number>(0);
+  const [ingredients, setIngredients] = useState<ProductIngredient[]>([]);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -43,6 +45,7 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
       setAllowPortions(Boolean(product.allowPortions));
       setHalfPortionPrice(product.customPortions?.['نیو نەفەر'] || Math.round((product.price || 0) * 0.6));
       setKiloPrice(product.customPortions?.['کیلۆ'] || Math.round((product.price || 0) * 4));
+      setIngredients(Array.isArray(product.ingredients) ? [...product.ingredients] : []);
       setValidationError(null);
     }
   }, [product, isOpen]);
@@ -86,6 +89,7 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
         active,
         allowPortions,
         customPortions: allowPortions ? customPortions : undefined,
+        ingredients,
       });
 
       success(`ئایتمی (${trimmedName}) بە سەرکەوتوویی نوێکرایەوە`);
@@ -279,6 +283,13 @@ export const ProductEditModal: React.FC<ProductEditModalProps> = ({
             </div>
           )}
         </div>
+
+        {/* Product Recipe & Ingredients Configuration */}
+        <ProductRecipeEditor
+          ingredients={ingredients}
+          onChange={setIngredients}
+          disabled={!isAdminOrManager || isSubmitting}
+        />
 
         {validationError && (
           <p className="text-xs text-red-600 bg-red-50 p-3 rounded-2xl border border-red-100 font-bold">

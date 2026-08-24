@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { Portion } from '../../types/product';
+import { Portion, ProductIngredient } from '../../types/product';
 import { DEFAULT_CATEGORIES } from '../../data/products';
 import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
+import { ProductRecipeEditor } from '../inventory/ProductRecipeEditor';
 import { formatIQD } from '../../utils/currency';
 import { useToast } from '../../hooks/useToast';
 import { useProducts } from '../../hooks/useProducts';
@@ -29,6 +30,7 @@ export const ProductAddModal: React.FC<ProductAddModalProps> = ({
   const [allowPortions, setAllowPortions] = useState<boolean>(false);
   const [halfPortionPrice, setHalfPortionPrice] = useState<number>(2500);
   const [kiloPrice, setKiloPrice] = useState<number>(16000);
+  const [ingredients, setIngredients] = useState<ProductIngredient[]>([]);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -40,6 +42,7 @@ export const ProductAddModal: React.FC<ProductAddModalProps> = ({
     setAllowPortions(false);
     setHalfPortionPrice(2500);
     setKiloPrice(16000);
+    setIngredients([]);
     setValidationError(null);
   };
 
@@ -80,6 +83,7 @@ export const ProductAddModal: React.FC<ProductAddModalProps> = ({
         active,
         allowPortions,
         customPortions: allowPortions ? customPortions : undefined,
+        ingredients,
       });
 
       success('ئایتمی نوێ بە سەرکەوتوویی زیادکرا');
@@ -275,6 +279,13 @@ export const ProductAddModal: React.FC<ProductAddModalProps> = ({
             </div>
           )}
         </div>
+
+        {/* Recipe / Ingredients Configuration */}
+        <ProductRecipeEditor
+          ingredients={ingredients}
+          onChange={setIngredients}
+          disabled={!isAdminOrManager || isSubmitting}
+        />
 
         {validationError && (
           <p className="text-xs text-red-600 bg-red-50 p-3 rounded-2xl border border-red-100 font-bold">

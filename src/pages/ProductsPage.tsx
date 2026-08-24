@@ -4,11 +4,13 @@ import { DEFAULT_CATEGORIES } from '../data/products';
 import { useProducts } from '../hooks/useProducts';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
+import { useInventory } from '../hooks/useInventory';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Button } from '../components/ui/Button';
 import { EmptyState } from '../components/ui/EmptyState';
 import { ProductEditModal } from '../components/products/ProductEditModal';
 import { ProductAddModal } from '../components/products/ProductAddModal';
+import { InventoryManagementView } from '../components/inventory/InventoryManagementView';
 import { formatIQD } from '../utils/currency';
 import {
   Plus,
@@ -22,13 +24,18 @@ import {
   PackageCheck,
   Layers,
   Power,
+  Package,
+  UtensilsCrossed,
+  AlertTriangle,
 } from 'lucide-react';
 
 export const ProductsPage: React.FC = () => {
   const { products, loading, toggleAvailability } = useProducts();
   const { role, setRole, isAdminOrManager } = useAuth();
   const { success, error } = useToast();
+  const { lowStockCount, ingredients } = useInventory();
 
+  const [activeSubTab, setActiveSubTab] = useState<'products' | 'inventory'>('products');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
@@ -81,27 +88,67 @@ export const ProductsPage: React.FC = () => {
 
   return (
     <div id="products-management-page" className="space-y-5 select-none">
-      {/* Top Header */}
-      <PageHeader
-        title="بەڕێوەبردنی ئایتمەکان و مینیو"
-        subtitle="دەستکاریکردنی ناو، نرخ، زیادکردنی ئایتمی نوێ، و کۆنتڕۆڵی بەردەستبوون بۆ فرۆشتن"
-        action={
-          <div className="flex items-center gap-2.5">
-            {isAdminOrManager && (
-              <Button
-                id="open-add-product-modal-btn"
-                type="button"
-                variant="primary"
-                onClick={() => setIsAddModalOpen(true)}
-                className="gap-2 font-black bg-orange-500 hover:bg-orange-600 text-white rounded-2xl custom-shadow px-4 py-2.5"
-              >
-                <Plus className="w-4 h-4" />
-                <span>زیادکردنی ئایتمی نوێ</span>
-              </Button>
+      {/* Top Main Navigation Switcher (Products vs Inventory) */}
+      <div className="flex items-center justify-between gap-3 bg-white p-2.5 rounded-3xl border border-orange-100 shadow-xs">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('products')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-black transition-all ${
+              activeSubTab === 'products'
+                ? 'bg-orange-500 text-white shadow-sm'
+                : 'text-gray-600 hover:bg-orange-50/70 hover:text-gray-900'
+            }`}
+          >
+            <UtensilsCrossed className="w-4 h-4" />
+            <span>ئایتمەکانی مینیو ({stats.total})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveSubTab('inventory')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-black transition-all ${
+              activeSubTab === 'inventory'
+                ? 'bg-orange-500 text-white shadow-sm'
+                : 'text-gray-600 hover:bg-orange-50/70 hover:text-gray-900'
+            }`}
+          >
+            <Package className="w-4 h-4" />
+            <span>پێکهاتەکان و کۆگا ({ingredients.length})</span>
+            {lowStockCount > 0 && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-500 text-white animate-pulse">
+                {lowStockCount} کەمە
+              </span>
             )}
-          </div>
-        }
-      />
+          </button>
+        </div>
+      </div>
+
+      {activeSubTab === 'inventory' ? (
+        <InventoryManagementView />
+      ) : (
+        <>
+          {/* Top Header */}
+          <PageHeader
+            title="بەڕێوەبردنی ئایتمەکان و مینیو"
+            subtitle="دەستکاریکردنی ناو، نرخ، زیادکردنی ئایتمی نوێ، و کۆنتڕۆڵی بەردەستبوون بۆ فرۆشتن"
+            action={
+              <div className="flex items-center gap-2.5">
+                {isAdminOrManager && (
+                  <Button
+                    id="open-add-product-modal-btn"
+                    type="button"
+                    variant="primary"
+                    onClick={() => setIsAddModalOpen(true)}
+                    className="gap-2 font-black bg-orange-500 hover:bg-orange-600 text-white rounded-2xl custom-shadow px-4 py-2.5"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>زیادکردنی ئایتمی نوێ</span>
+                  </Button>
+                )}
+              </div>
+            }
+          />
 
       {/* Role Indicator & Summary Stat Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-4 gap-3.5">
@@ -328,6 +375,8 @@ export const ProductsPage: React.FC = () => {
             </table>
           </div>
         </div>
+      )}
+        </>
       )}
 
       {/* Edit Product Modal */}
