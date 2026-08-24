@@ -70,10 +70,25 @@ export const ShiftControlBar: React.FC = () => {
             <Button
               id="btn-open-shift"
               onClick={() => setIsOpenShiftModalOpen(true)}
+              style={{ backgroundColor: '#ffffff' }}
               className="w-full sm:w-auto bg-white hover:bg-orange-50 text-orange-600 hover:text-orange-700 font-black rounded-xl px-5 py-2.5 shadow-sm text-xs flex items-center justify-center gap-2 shrink-0 transition-all active:scale-95"
             >
               <LockOpen className="w-4 h-4 text-orange-600" />
-              <span>کردنەوەی شێفت</span>
+              <span
+                style={{
+                  backgroundColor: '#cb1212',
+                  marginRight: '6px',
+                  paddingRight: '7px',
+                  paddingLeft: '8px',
+                  marginLeft: '2px',
+                  marginTop: '2px',
+                  marginBottom: '0px',
+                  fontSize: '14px',
+                  borderColor: '#ea2323',
+                }}
+              >
+                کردنەوەی شێفت
+              </span>
             </Button>
           </div>
         ) : (

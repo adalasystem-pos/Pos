@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useDailyReport } from '../hooks/useDailyReport';
+import { useAnalyticsReport } from '../hooks/useAnalyticsReport';
 import { useAuth } from '../hooks/useAuth';
 import { useToast } from '../hooks/useToast';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
@@ -8,6 +8,9 @@ import { DailyOrdersList } from '../components/reports/DailyOrdersList';
 import { ExpenseList } from '../components/expenses/ExpenseList';
 import { DailyClosingCard } from '../components/closing/DailyClosingCard';
 import { ClosingModal } from '../components/closing/ClosingModal';
+import { AnalyticsRangeSelector } from '../components/reports/AnalyticsRangeSelector';
+import { TopSellingProductsCard } from '../components/reports/TopSellingProductsCard';
+import { ExpenseBreakdownCard } from '../components/reports/ExpenseBreakdownCard';
 import { PageHeader } from '../components/layout/PageHeader';
 import { LoadingState } from '../components/ui/LoadingState';
 import { formatIQD } from '../utils/currency';
@@ -18,10 +21,26 @@ import {
   ShoppingBag,
   Receipt,
   Calendar,
+  AlertCircle,
+  RotateCw,
 } from 'lucide-react';
+import { DailySummary } from '../types/closing';
 
 export const ReportsPage: React.FC = () => {
-  const { summary, orders, expenses, closing, isClosed, loading, executeClosing } = useDailyReport();
+  const {
+    range,
+    setRange,
+    rangeInfo,
+    summary,
+    orders,
+    expenses,
+    closing,
+    loading,
+    error: loadError,
+    refresh,
+    executeClosing,
+  } = useAnalyticsReport();
+
   const { user, displayName } = useAuth();
   const { success, error } = useToast();
   const { isOnline } = useNetworkStatus();
@@ -42,37 +61,77 @@ export const ReportsPage: React.FC = () => {
     try {
       await executeClosing(user.uid, displayName, notes);
       success('سندوقی ئەمڕۆ بە سەرکەوتوویی داخرا و پاشەکەوت کرا');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Closing error:', err);
       throw err;
     }
   };
 
+  // Convert AnalyticsSummary to DailySummary shape for DailyClosingCard & Modal
+  const dailyClosingSummary: DailySummary = {
+    businessDate: rangeInfo.startDateStr,
+    totalSales: summary.totalSales,
+    totalExpenses: summary.totalExpenses,
+    netProfit: summary.netProfit,
+    orderCount: summary.orderCount,
+    expenseCount: summary.expenseCount,
+  };
+
+  const getRangeSubtitle = () => {
+    switch (range) {
+      case 'weekly':
+        return `شیکاری و ژمێریاری ئەم هەفتەیە (${summary.startDate} تا ${summary.endDate})`;
+      case 'monthly':
+        return `شیکاری و ژمێریاری ئەم مانگە (${summary.startDate} تا ${summary.endDate})`;
+      case 'daily':
+      default:
+        return `ژمێریاری ڕۆژانەی چێشتخانە بۆ بەرواری (${summary.startDate}) بە کاتی بەغدا`;
+    }
+  };
+
   return (
-    <div id="reports-page" className="space-y-6">
+    <div id="reports-page" className="space-y-6 select-none">
       {/* Page Header */}
       <PageHeader
-        title="ڕاپۆرتی دارایی و سندوق"
-        subtitle={`ژمێریاری ڕۆژانەی چێشتخانە بۆ بەرواری (${summary.businessDate}) بە کاتی بەغدا`}
+        title="ڕاپۆرت و زیرەکی بەڕێوەبردن"
+        subtitle={getRangeSubtitle()}
         action={
-          <div className="flex items-center gap-1.5 text-xs text-gray-500 bg-white border border-orange-200 px-3.5 py-2 rounded-2xl shadow-2xs">
-            <Calendar className="w-4 h-4 text-orange-500" />
-            <span>ڕۆژی کارکردن:</span>
-            <span className="font-bold text-gray-800" dir="ltr">
-              {summary.businessDate}
-            </span>
-          </div>
+          <button
+            type="button"
+            onClick={refresh}
+            disabled={loading}
+            className="flex items-center gap-1.5 text-xs text-gray-700 bg-white hover:bg-orange-50/70 border border-orange-200 px-3.5 py-2 rounded-2xl shadow-2xs font-bold transition-colors cursor-pointer"
+          >
+            <RotateCw className={`w-3.5 h-3.5 text-orange-500 ${loading ? 'animate-spin' : ''}`} />
+            <span>نوێکردنەوە</span>
+          </button>
         }
       />
+
+      {/* Analytics Time Range Selector (ئەمڕۆ، ئەم هەفتەیە، ئەم مانگە) */}
+      <AnalyticsRangeSelector
+        selectedRange={range}
+        onSelectRange={setRange}
+        dateLabel={summary.dateLabel}
+        loading={loading}
+      />
+
+      {/* Error state if any */}
+      {loadError && (
+        <div className="p-4 rounded-2xl bg-red-50 border border-red-200 text-red-700 text-xs font-bold flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+          <span>{loadError}</span>
+        </div>
+      )}
 
       {/* Main Financial KPI Summary Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Total Sales */}
         <SummaryCard
           id="kpi-total-sales"
-          title="کۆی فرۆش (داواکارییەکان)"
+          title={`کۆی فرۆش (${range === 'daily' ? 'ئەمڕۆ' : range === 'weekly' ? 'ئەم هەفتەیە' : 'ئەم مانگە'})`}
           amount={formatIQD(summary.totalSales)}
-          subtitle={`${summary.orderCount} داواکاری تەواوکراو`}
+          subtitle={`${summary.orderCount} داواکاری دروستکراو`}
           icon={<TrendingUp className="w-6 h-6" />}
           variant="sales"
         />
@@ -80,7 +139,7 @@ export const ReportsPage: React.FC = () => {
         {/* Total Expenses */}
         <SummaryCard
           id="kpi-total-expenses"
-          title="کۆی خەرجییەکان"
+          title={`کۆی خەرجییەکان (${range === 'daily' ? 'ئەمڕۆ' : range === 'weekly' ? 'ئەم هەفتەیە' : 'ئەم مانگە'})`}
           amount={formatIQD(summary.totalExpenses)}
           subtitle={`${summary.expenseCount} تۆماری خەرجی`}
           icon={<TrendingDown className="w-6 h-6" />}
@@ -98,15 +157,30 @@ export const ReportsPage: React.FC = () => {
         />
       </div>
 
-      {/* End-of-Day Closing Section */}
-      <DailyClosingCard
-        closing={closing}
-        summary={summary}
-        onOpenClosingModal={() => setIsClosingModalOpen(true)}
-        isOnline={isOnline}
-      />
+      {/* End-of-Day Closing Section (Visible on Daily mode) */}
+      {range === 'daily' && (
+        <DailyClosingCard
+          closing={closing}
+          summary={dailyClosingSummary}
+          onOpenClosingModal={() => setIsClosingModalOpen(true)}
+          isOnline={isOnline}
+        />
+      )}
 
-      {/* Breakdown Lists */}
+      {/* Management Intelligence Grid: Best Sellers & Expense Analysis */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Best Selling Products */}
+        <TopSellingProductsCard products={summary.topProducts} loading={loading} />
+
+        {/* Expense Category Breakdown */}
+        <ExpenseBreakdownCard
+          categories={summary.expenseCategories}
+          totalExpenses={summary.totalExpenses}
+          loading={loading}
+        />
+      </div>
+
+      {/* Detailed Breakdown Lists */}
       <div className="space-y-4 pt-2">
         {/* Tab switch between orders & expenses */}
         <div className="flex items-center justify-between border-b border-orange-100 pb-3">
@@ -141,7 +215,7 @@ export const ReportsPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Selected List */}
+        {/* Selected List Content */}
         {loading ? (
           <LoadingState message="زانیارییەکان باردەکرێن..." />
         ) : activeTab === 'orders' ? (
@@ -156,7 +230,7 @@ export const ReportsPage: React.FC = () => {
         isOpen={isClosingModalOpen}
         onClose={() => setIsClosingModalOpen(false)}
         onConfirm={handleConfirmClosing}
-        summary={summary}
+        summary={dailyClosingSummary}
       />
     </div>
   );

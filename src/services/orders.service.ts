@@ -437,6 +437,68 @@ export async function getTodayOrders(targetDateStr?: string): Promise<Order[]> {
 }
 
 /**
+ * Retrieves valid orders across a date range (inclusive YYYY-MM-DD strings).
+ * Excludes cancelled orders from valid sales & management analytics.
+ */
+export async function getOrdersByDateRange(
+  startDateStr: string,
+  endDateStr: string
+): Promise<Order[]> {
+  const ordersRef = collection(db, ORDERS_COLLECTION);
+
+  try {
+    let q;
+    if (startDateStr === endDateStr) {
+      q = query(ordersRef, where('baghdadDate', '==', startDateStr));
+    } else {
+      q = query(
+        ordersRef,
+        where('baghdadDate', '>=', startDateStr),
+        where('baghdadDate', '<=', endDateStr)
+      );
+    }
+    const snapshot = await getDocs(q);
+    const orders: Order[] = [];
+    snapshot.forEach((d) => {
+      const ord = d.data() as Order;
+      if (ord.status !== 'cancelled') {
+        orders.push(ord);
+      }
+    });
+    return orders.sort((a, b) => {
+      const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
+      const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
+      return timeB - timeA;
+    });
+  } catch (err) {
+    console.error('Range query by baghdadDate failed, falling back to Timestamp range:', err);
+    const { start } = getBaghdadDayRange(startDateStr);
+    const { end } = getBaghdadDayRange(endDateStr);
+    const startTs = Timestamp.fromDate(start);
+    const endTs = Timestamp.fromDate(end);
+    const fallbackQ = query(
+      ordersRef,
+      where('createdAt', '>=', startTs),
+      where('createdAt', '<=', endTs)
+    );
+    const snapshot = await getDocs(fallbackQ);
+    const orders: Order[] = [];
+    snapshot.forEach((d) => {
+      const ord = d.data() as Order;
+      if (ord.status !== 'cancelled') {
+        orders.push(ord);
+      }
+    });
+    return orders.sort((a, b) => {
+      const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
+      const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
+      return timeB - timeA;
+    });
+  }
+}
+
+
+/**
  * Real-time listener for today's active orders (preparing, ready, served, completed).
  * Excludes cancelled orders from standard sales lists.
  */

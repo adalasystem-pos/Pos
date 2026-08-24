@@ -104,6 +104,61 @@ export async function getTodayExpenses(targetDateStr?: string): Promise<Expense[
 }
 
 /**
+ * Retrieves expenses across a date range (inclusive YYYY-MM-DD strings).
+ */
+export async function getExpensesByDateRange(
+  startDateStr: string,
+  endDateStr: string
+): Promise<Expense[]> {
+  const expensesRef = collection(db, EXPENSES_COLLECTION);
+
+  try {
+    let q;
+    if (startDateStr === endDateStr) {
+      q = query(expensesRef, where('baghdadDate', '==', startDateStr));
+    } else {
+      q = query(
+        expensesRef,
+        where('baghdadDate', '>=', startDateStr),
+        where('baghdadDate', '<=', endDateStr)
+      );
+    }
+    const snapshot = await getDocs(q);
+    const expenses: Expense[] = [];
+    snapshot.forEach((d) => {
+      expenses.push(d.data() as Expense);
+    });
+    return expenses.sort((a, b) => {
+      const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
+      const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
+      return timeB - timeA;
+    });
+  } catch (err) {
+    console.error('Range query by baghdadDate failed for expenses, falling back to Timestamp range:', err);
+    const { start } = getBaghdadDayRange(startDateStr);
+    const { end } = getBaghdadDayRange(endDateStr);
+    const startTs = Timestamp.fromDate(start);
+    const endTs = Timestamp.fromDate(end);
+    const fallbackQ = query(
+      expensesRef,
+      where('createdAt', '>=', startTs),
+      where('createdAt', '<=', endTs)
+    );
+    const snapshot = await getDocs(fallbackQ);
+    const expenses: Expense[] = [];
+    snapshot.forEach((d) => {
+      expenses.push(d.data() as Expense);
+    });
+    return expenses.sort((a, b) => {
+      const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
+      const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
+      return timeB - timeA;
+    });
+  }
+}
+
+
+/**
  * Real-time listener for today's expenses.
  */
 export function listenTodayExpenses(
