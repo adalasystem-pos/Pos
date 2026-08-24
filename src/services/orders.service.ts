@@ -2,6 +2,7 @@ import {
   collection,
   doc,
   setDoc,
+  updateDoc,
   serverTimestamp,
   query,
   where,
@@ -11,7 +12,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { CartItem, Order } from '../types/order';
+import { CartItem, Order, OrderStatus, OrderSource } from '../types/order';
 import { calculateLineTotal, calculateOrderTotal } from '../utils/calculations';
 import { validateCart } from '../utils/validation';
 import { getBaghdadDateString, getBaghdadDayRange } from '../utils/dates';
@@ -21,8 +22,27 @@ const ORDERS_COLLECTION = 'orders';
 export interface CreateOrderParams {
   items: CartItem[];
   note?: string;
+  tableNumber?: string;
+  source?: OrderSource;
   userId: string;
   userName?: string;
+}
+
+/**
+ * Generates a clean human-readable order number based on today's order sequence
+ */
+async function generateOrderNumber(dateStr: string): Promise<string> {
+  try {
+    const ordersRef = collection(db, ORDERS_COLLECTION);
+    const q = query(ordersRef, where('baghdadDate', '==', dateStr));
+    const snapshot = await getDocs(q);
+    const count = snapshot.size + 1;
+    return `#${count.toString().padStart(3, '0')}`;
+  } catch (err) {
+    // Fallback based on timestamp if count fails
+    const timeSeq = (Date.now() % 1000).toString().padStart(3, '0');
+    return `#${timeSeq}`;
+  }
 }
 
 /**
@@ -30,7 +50,14 @@ export interface CreateOrderParams {
  * Recalculates all line totals and order totals to prevent tampering.
  */
 export async function createOrder(params: CreateOrderParams): Promise<Order> {
-  const { items, note = '', userId, userName = 'کاشێر' } = params;
+  const {
+    items,
+    note = '',
+    tableNumber = '',
+    source = 'pos',
+    userId,
+    userName = 'کاشێر',
+  } = params;
 
   if (!userId) {
     throw new Error('دەبێت بەکارهێنەر چووبێتە ژوورەوە بۆ تەواوکردنی داواکاری');
@@ -62,14 +89,18 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
     throw new Error('کۆی گشتی داواکاری ناتوانێت سفر بێت');
   }
 
-  // 3. Generate unique order ID and record
+  // 3. Generate unique order ID and human-readable sequence
   try {
     const ordersRef = collection(db, ORDERS_COLLECTION);
     const newOrderDoc = doc(ordersRef);
     const baghdadDate = getBaghdadDateString();
+    const orderNumber = await generateOrderNumber(baghdadDate);
 
     const orderPayload = {
       orderId: newOrderDoc.id,
+      orderNumber,
+      source,
+      tableNumber: tableNumber.trim(),
       items: verifiedItems,
       subtotal,
       totalAmount,
@@ -79,6 +110,7 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
       createdBy: userId,
       createdByName: userName,
       baghdadDate,
+      updatedAt: serverTimestamp(),
     };
 
     // 4. Save to Firestore
@@ -93,6 +125,18 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
     console.error('Error creating order:', error);
     throw error;
   }
+}
+
+/**
+ * Updates an order status (e.g. marking preparing -> completed)
+ */
+export async function updateOrderStatus(orderId: string, status: OrderStatus): Promise<void> {
+  if (!orderId) throw new Error('Invalid order ID');
+  const orderDocRef = doc(db, ORDERS_COLLECTION, orderId);
+  await updateDoc(orderDocRef, {
+    status,
+    updatedAt: serverTimestamp(),
+  });
 }
 
 /**
@@ -175,6 +219,42 @@ export function listenTodayOrders(
         const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
         const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
         return timeB - timeA;
+      });
+      callback(orders);
+    },
+    (err) => {
+      if (onError) onError(err);
+    }
+  );
+}
+
+/**
+ * Real-time listener for active preparing orders (status == 'preparing')
+ */
+export function listenActivePreparingOrders(
+  callback: (orders: Order[]) => void,
+  targetDateStr?: string,
+  onError?: (err: Error) => void
+) {
+  const dateStr = targetDateStr || getBaghdadDateString();
+  const ordersRef = collection(db, ORDERS_COLLECTION);
+  const q = query(
+    ordersRef,
+    where('baghdadDate', '==', dateStr),
+    where('status', '==', 'preparing')
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const orders: Order[] = [];
+      snapshot.forEach((d) => {
+        orders.push(d.data() as Order);
+      });
+      orders.sort((a, b) => {
+        const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
+        const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
+        return timeA - timeB; // Oldest preparing order first for kitchen queue
       });
       callback(orders);
     },

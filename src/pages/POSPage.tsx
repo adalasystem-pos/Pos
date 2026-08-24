@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Product, ProductCategory, Portion } from '../types/product';
 import { DEFAULT_CATEGORIES } from '../data/products';
 import { useCart } from '../hooks/useCart';
@@ -8,8 +8,10 @@ import { CategoryTabs } from '../components/pos/CategoryTabs';
 import { ProductGrid } from '../components/pos/ProductGrid';
 import { ProductModal } from '../components/pos/ProductModal';
 import { CartPanel } from '../components/cart/CartPanel';
+import { OrderPreparationQueue } from '../components/pos/OrderPreparationQueue';
 import { PageHeader } from '../components/layout/PageHeader';
-import { Search, ShoppingBag } from 'lucide-react';
+import { listenActivePreparingOrders } from '../services/orders.service';
+import { Search, ShoppingBag, UtensilsCrossed, LayoutGrid } from 'lucide-react';
 
 export const POSPage: React.FC = () => {
   const { addItem, itemCount } = useCart();
@@ -21,6 +23,15 @@ export const POSPage: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState<boolean>(false);
+  const [activeSubView, setActiveSubView] = useState<'menu' | 'queue'>('menu');
+  const [preparingCount, setPreparingCount] = useState<number>(0);
+
+  useEffect(() => {
+    const unsub = listenActivePreparingOrders((orders) => {
+      setPreparingCount(orders.length);
+    });
+    return () => unsub();
+  }, []);
 
   // Filter products by category and search query
   const filteredProducts = useMemo(() => {
@@ -69,76 +80,129 @@ export const POSPage: React.FC = () => {
 
   return (
     <div id="pos-page" className="space-y-4">
-      {/* Top Header & Search */}
+      {/* Top Header & View Switcher */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <PageHeader
           title="خاڵی فرۆشتن (POS)"
-          subtitle="دیاریکردنی خواردن و بەڕێوەبردنی داواکارییەکانی چێشتخانە"
+          subtitle="دیاریکردنی خواردن، ناردن بۆ ئامادەکردن و چاپکردنی پسوولە"
         />
 
-        {/* Search Bar */}
-        <div className="relative w-full sm:w-72">
-          <div className="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-gray-400">
-            <Search className="w-4 h-4" />
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* SubView Switcher Tabs */}
+          <div className="flex items-center p-1 bg-white rounded-2xl border border-orange-200/90 shadow-2xs">
+            <button
+              id="pos-view-menu-btn"
+              type="button"
+              onClick={() => setActiveSubView('menu')}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                activeSubView === 'menu'
+                  ? 'bg-orange-500 text-white shadow-xs'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              <span>لیستی خواردنەکان</span>
+            </button>
+
+            <button
+              id="pos-view-queue-btn"
+              type="button"
+              onClick={() => setActiveSubView('queue')}
+              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer relative ${
+                activeSubView === 'queue'
+                  ? 'bg-orange-500 text-white shadow-xs'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              <UtensilsCrossed className="w-3.5 h-3.5" />
+              <span>ئامادەکردنی چێشتخانە</span>
+              {preparingCount > 0 && (
+                <span
+                  className={`text-[10px] font-black px-1.5 py-0.2 rounded-full ${
+                    activeSubView === 'queue'
+                      ? 'bg-white text-orange-600'
+                      : 'bg-orange-500 text-white'
+                  }`}
+                >
+                  {preparingCount}
+                </span>
+              )}
+            </button>
           </div>
-          <input
-            id="product-search-input"
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="گەڕان بەدوای خواردن یان بەرهەم..."
-            className="w-full pr-10 pl-4 py-2.5 text-xs sm:text-sm bg-white rounded-2xl border border-orange-200/90 shadow-2xs focus:outline-none focus:ring-2 focus:ring-orange-400 text-right min-h-[44px] font-semibold"
-          />
+
+          {/* Search Bar - only shown in menu view */}
+          {activeSubView === 'menu' && (
+            <div className="relative w-full sm:w-64">
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3.5 pointer-events-none text-gray-400">
+                <Search className="w-4 h-4" />
+              </div>
+              <input
+                id="product-search-input"
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="گەڕان بەدوای خواردن..."
+                className="w-full pr-10 pl-4 py-2 text-xs bg-white rounded-2xl border border-orange-200/90 shadow-2xs focus:outline-none focus:ring-2 focus:ring-orange-400 text-right min-h-[40px] font-semibold"
+              />
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Main Grid & Cart Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* Left / Center: Categories & Products (8 cols on lg) */}
-        <div className="lg:col-span-7 xl:col-span-8 space-y-4">
-          {/* Categories Selector */}
-          <CategoryTabs
-            categories={categories}
-            selectedCategoryId={selectedCategoryId}
-            onSelectCategory={setSelectedCategoryId}
-          />
+      {activeSubView === 'queue' ? (
+        /* Kitchen Preparation Queue View */
+        <OrderPreparationQueue />
+      ) : (
+        /* Main Grid & Cart Layout */
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          {/* Left / Center: Categories & Products (8 cols on lg) */}
+          <div className="lg:col-span-7 xl:col-span-8 space-y-4">
+            {/* Categories Selector */}
+            <CategoryTabs
+              categories={categories}
+              selectedCategoryId={selectedCategoryId}
+              onSelectCategory={setSelectedCategoryId}
+            />
 
-          {/* Products Grid */}
-          <ProductGrid
-            products={filteredProducts}
-            onSelectProduct={handleProductClick}
-            searchQuery={searchQuery}
-          />
-        </div>
+            {/* Products Grid */}
+            <ProductGrid
+              products={filteredProducts}
+              onSelectProduct={handleProductClick}
+              searchQuery={searchQuery}
+            />
+          </div>
 
-        {/* Right: Cart Panel (4 cols on lg, sticky on desktop) */}
-        <div className="hidden lg:block lg:col-span-5 xl:col-span-4 sticky top-20">
-          <div className="h-[calc(100vh-120px)]">
-            <CartPanel />
+          {/* Right: Cart Panel (4 cols on lg, sticky on desktop) */}
+          <div className="hidden lg:block lg:col-span-5 xl:col-span-4 sticky top-20">
+            <div className="h-[calc(100vh-120px)]">
+              <CartPanel />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Mobile Floating Cart Action Button */}
-      <div className="lg:hidden fixed bottom-20 left-4 z-40">
-        <button
-          id="mobile-open-cart-btn"
-          type="button"
-          onClick={() => setIsMobileCartOpen(true)}
-          className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-5 py-3.5 rounded-full custom-shadow border-2 border-white cursor-pointer active:scale-95 transition-all font-black text-sm"
-        >
-          <ShoppingBag className="w-5 h-5" />
-          <span>سەبەتە</span>
-          {itemCount > 0 && (
-            <span className="bg-white text-orange-600 text-xs px-2 py-0.5 rounded-full font-black">
-              {itemCount}
-            </span>
-          )}
-        </button>
-      </div>
+      {activeSubView === 'menu' && (
+        <div className="lg:hidden fixed bottom-20 left-4 z-40">
+          <button
+            id="mobile-open-cart-btn"
+            type="button"
+            onClick={() => setIsMobileCartOpen(true)}
+            className="flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white px-5 py-3.5 rounded-full custom-shadow border-2 border-white cursor-pointer active:scale-95 transition-all font-black text-sm"
+          >
+            <ShoppingBag className="w-5 h-5" />
+            <span>سەبەتە</span>
+            {itemCount > 0 && (
+              <span className="bg-white text-orange-600 text-xs px-2 py-0.5 rounded-full font-black">
+                {itemCount}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Mobile Cart Drawer Modal */}
-      {isMobileCartOpen && (
+      {isMobileCartOpen && activeSubView === 'menu' && (
         <div className="lg:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex flex-col justify-end">
           <div className="bg-white rounded-t-3xl max-h-[88vh] flex flex-col overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-200">
             <div className="p-3.5 bg-orange-50 border-b border-orange-100 flex justify-between items-center">

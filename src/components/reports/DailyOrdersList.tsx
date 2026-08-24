@@ -30,12 +30,22 @@ export const DailyOrdersList: React.FC<DailyOrdersListProps> = ({ orders, loadin
           id={`order-row-${order.orderId}`}
           className="p-4 bg-white border border-orange-100/90 shadow-sm text-right rounded-3xl"
         >
-          {/* Top row: Order Number, Time, Cashier, Amount */}
+          {/* Top row: Order Number, Table, Time, Cashier, Amount */}
           <div className="flex items-start justify-between gap-2 pb-3 border-b border-orange-50">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-black bg-orange-100 text-orange-900 px-2.5 py-0.5 rounded-xl border border-orange-200">
-                #{orders.length - idx}
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs font-black bg-orange-100 text-orange-900 px-2.5 py-0.5 rounded-xl border border-orange-200 font-mono">
+                {order.orderNumber || `#${orders.length - idx}`}
               </span>
+              {order.tableNumber && (
+                <span className="text-[11px] font-black bg-orange-500 text-white px-2 py-0.5 rounded-lg">
+                  مێز: {order.tableNumber}
+                </span>
+              )}
+              {order.source === 'captain' && (
+                <span className="text-[10px] font-bold bg-blue-50 text-blue-700 px-1.5 py-0.2 rounded border border-blue-200">
+                  کاپتن
+                </span>
+              )}
               <div className="flex items-center gap-1.5 text-xs text-gray-400 font-medium">
                 <Clock className="w-3.5 h-3.5 text-gray-400" />
                 <span dir="ltr">{formatBaghdadTime(order.createdAt)}</span>
@@ -43,7 +53,7 @@ export const DailyOrdersList: React.FC<DailyOrdersListProps> = ({ orders, loadin
             </div>
 
             <div className="flex items-center gap-2">
-              <span className="text-xs sm:text-sm font-black text-orange-600 bg-orange-50 px-3 py-1 rounded-xl border border-orange-100">
+              <span className="text-xs sm:text-sm font-black text-orange-600 bg-orange-50 px-3 py-1 rounded-xl border border-orange-100 font-mono" dir="ltr">
                 {formatIQD(order.totalAmount)}
               </span>
             </div>

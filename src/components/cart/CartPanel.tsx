@@ -5,6 +5,7 @@ import { useToast } from '../../hooks/useToast';
 import { useProducts } from '../../hooks/useProducts';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { createOrder } from '../../services/orders.service';
+import { iminPrinter } from '../../services/iminPrinter';
 import { Order } from '../../types/order';
 import { CartItemRow } from './CartItemRow';
 import { OrderSummary } from './OrderSummary';
@@ -14,7 +15,9 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { EmptyState } from '../ui/EmptyState';
 import { formatIQD } from '../../utils/currency';
 import { formatBaghdadTime } from '../../utils/dates';
-import { ShoppingBag, Trash2, CheckCircle2, MessageSquare } from 'lucide-react';
+import { ShoppingBag, Trash2, CheckCircle2, MessageSquare, UtensilsCrossed } from 'lucide-react';
+
+const COMMON_TABLES = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', 'هۆڵ', 'سەفەری'];
 
 export const CartPanel: React.FC = () => {
   const {
@@ -24,13 +27,15 @@ export const CartPanel: React.FC = () => {
     totalAmount,
     note,
     setNote,
+    tableNumber,
+    setTableNumber,
     increaseQuantity,
     decreaseQuantity,
     removeItem,
     clearCart,
   } = useCart();
 
-  const { user, displayName } = useAuth();
+  const { user, displayName, role } = useAuth();
   const { isProductActive } = useProducts();
   const { showToast, error, warning } = useToast();
   const { isOnline } = useNetworkStatus();
@@ -53,7 +58,7 @@ export const CartPanel: React.FC = () => {
     }
 
     if (!isOnline) {
-      error('پەیوەندی ئینتەرنێت پچڕاوە. ناتوانرێت داواکاری پاشەکەوت بکرێت.');
+      error('پەیوەندی ئینتەرنێت پچڕاوە. داواکارییەکە نەنێردرا.');
       return;
     }
 
@@ -78,10 +83,14 @@ export const CartPanel: React.FC = () => {
     try {
       setIsSubmitting(true);
 
+      const orderSource = role === 'captain' ? 'captain' : 'pos';
+
       // Step 3 & 4: Create and save order in Firestore with status = 'preparing'
       const newOrder = await createOrder({
         items,
         note,
+        tableNumber,
+        source: orderSource,
         userId: user.uid,
         userName: displayName,
       });
@@ -89,14 +98,15 @@ export const CartPanel: React.FC = () => {
       // Step 5: Confirmed success -> Clear cart
       clearCart();
 
-      const shortOrderId = newOrder.orderId ? newOrder.orderId.slice(-6).toUpperCase() : '000000';
+      const orderNumDisplay = newOrder.orderNumber || (newOrder.orderId ? `#${newOrder.orderId.slice(-4).toUpperCase()}` : '#001');
       const timeStr = formatBaghdadTime(newOrder.createdAt);
+      const tableInfo = newOrder.tableNumber ? ` • مێز: ${newOrder.tableNumber}` : '';
 
       // Trigger preparation notification
       showToast(
-        `ژمارەی داواکاری: #${shortOrderId} • کات: ${timeStr} (${formatIQD(newOrder.totalAmount)})`,
+        `ژمارەی داواکاری: ${orderNumDisplay}${tableInfo} • کات: ${timeStr} (${formatIQD(newOrder.totalAmount)})`,
         'success',
-        'داواکاریەکە نێردرا بۆ ئامادەکردن',
+        'داواکاریەکە بە سەرکەوتوویی نێردرا بۆ ئامادەکردن',
         5000
       );
 
@@ -104,20 +114,21 @@ export const CartPanel: React.FC = () => {
       setCompletedOrder(newOrder);
       setIsSuccessModalOpen(true);
 
-      // Step 8: Trigger POS receipt print automatically
-      setTimeout(() => {
-        try {
-          window.print();
-        } catch (printErr) {
-          console.warn('Automatic print dialog error:', printErr);
-          warning('فرۆشتن بە سەرکەوتوویی تۆمارکرا، بەڵام چاپکردنی پسوولە سەرکەوتوو نەبوو');
+      // Step 8: Trigger POS thermal receipt print automatically
+      try {
+        const printRes = await iminPrinter.printReceipt(newOrder, false);
+        if (!printRes.success && printRes.status !== 'Ready') {
+          warning('داواکاری تۆمارکرا، بەڵام چاپکردنی پسوولە سەرکەوتوو نەبوو');
         }
-      }, 350);
+      } catch (printErr) {
+        console.warn('Automatic print error:', printErr);
+        warning('داواکاری تۆمارکرا، بەڵام چاپکردنی پسوولە سەرکەوتوو نەبوو');
+      }
     } catch (err: any) {
       console.error('Order creation error:', err);
       // If saving fails: preserve cart and notify
       error(
-        err.message || 'داواکاریەکە نەنێردرا بۆ ئامادەکردن. فرۆشتن تۆمار نەکرا. تکایە دووبارە هەوڵ بدەرەوە.'
+        err.message || 'داواکارییەکە نەنێردرا. تکایە پەیوەندی ئینتەرنێت بپشکنە و دووبارە هەوڵ بدەرەوە.'
       );
     } finally {
       setIsSubmitting(false);
@@ -158,7 +169,7 @@ export const CartPanel: React.FC = () => {
       </div>
 
       {/* Cart Items List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2.5 max-h-[calc(100vh-380px)] md:max-h-none">
+      <div className="flex-1 overflow-y-auto p-4 space-y-2.5 max-h-[calc(100vh-420px)] md:max-h-none">
         {items.length === 0 ? (
           <div className="py-12">
             <EmptyState
@@ -181,13 +192,59 @@ export const CartPanel: React.FC = () => {
         )}
       </div>
 
-      {/* Note & Bottom Summary */}
+      {/* Table Selection, Note & Bottom Summary */}
       {items.length > 0 && (
-        <div className="p-4 sm:p-5 bg-white border-t border-orange-100 space-y-3.5">
+        <div className="p-4 sm:p-5 bg-white border-t border-orange-100 space-y-3">
+          {/* Table Number Field */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-bold text-gray-700 flex items-center gap-1">
+                <UtensilsCrossed className="w-3.5 h-3.5 text-orange-500" />
+                <span>ژمارەی مێز (ئارەزوومەندانە):</span>
+              </label>
+              {tableNumber && (
+                <button
+                  type="button"
+                  onClick={() => setTableNumber('')}
+                  className="text-[10px] text-gray-400 hover:text-red-500 font-bold"
+                >
+                  پاککردنەوە
+                </button>
+              )}
+            </div>
+
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+              <input
+                id="cart-table-input"
+                type="text"
+                value={tableNumber}
+                onChange={(e) => setTableNumber(e.target.value)}
+                placeholder="ژمارەی مێز (نموونە: 12)..."
+                className="min-w-[110px] flex-1 px-3 py-1.5 text-xs font-bold rounded-xl border border-orange-200 bg-orange-50/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-300 text-right text-gray-800"
+              />
+              <div className="flex items-center gap-1 shrink-0">
+                {COMMON_TABLES.slice(0, 6).map((tbl) => (
+                  <button
+                    key={tbl}
+                    type="button"
+                    onClick={() => setTableNumber(tbl)}
+                    className={`px-2 py-1 text-[11px] font-black rounded-lg border transition-all cursor-pointer ${
+                      tableNumber === tbl
+                        ? 'bg-orange-500 text-white border-orange-500 shadow-2xs'
+                        : 'bg-white text-gray-700 border-orange-100 hover:bg-orange-50'
+                    }`}
+                  >
+                    {tbl}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
           {/* Note Input */}
           <div className="relative">
             <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-gray-400">
-              <MessageSquare className="w-4 h-4" />
+              <MessageSquare className="w-3.5 h-3.5" />
             </div>
             <input
               id="order-note-input"
@@ -195,7 +252,7 @@ export const CartPanel: React.FC = () => {
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="تێبینی بۆ چێشتخانە (ئارەزوومەندانە)..."
-              className="w-full pr-9 pl-3.5 py-2.5 text-xs font-semibold rounded-2xl border border-orange-100 bg-orange-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-300 text-right text-gray-800"
+              className="w-full pr-9 pl-3.5 py-2 text-xs font-semibold rounded-2xl border border-orange-100 bg-orange-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-300 text-right text-gray-800"
             />
           </div>
 
@@ -206,7 +263,7 @@ export const CartPanel: React.FC = () => {
             itemCount={itemCount}
           />
 
-          {/* Complete Order Button */}
+          {/* Send to Preparation Button */}
           <Button
             id="complete-order-btn"
             variant="primary"
@@ -215,10 +272,10 @@ export const CartPanel: React.FC = () => {
             onClick={handleCompleteOrder}
             isLoading={isSubmitting}
             disabled={!isOnline || items.length === 0}
-            className="w-full bg-orange-500 text-white font-black py-4 rounded-2xl text-base sm:text-lg custom-shadow hover:bg-orange-600 active:translate-y-1 active:shadow-none transition-all gap-2"
+            className="w-full bg-orange-500 text-white font-black py-3.5 sm:py-4 rounded-2xl text-base sm:text-lg custom-shadow hover:bg-orange-600 active:translate-y-1 active:shadow-none transition-all gap-2"
           >
             <CheckCircle2 className="w-5 h-5" />
-            <span>تەواوکردنی فرۆشتن</span>
+            <span>ناردن بۆ ئامادەکردن</span>
           </Button>
         </div>
       )}

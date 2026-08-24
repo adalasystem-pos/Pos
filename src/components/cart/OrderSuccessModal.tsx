@@ -6,6 +6,7 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { PosReceipt } from '../pos/PosReceipt';
 import { formatBaghdadTime } from '../../utils/dates';
+import { iminPrinter } from '../../services/iminPrinter';
 import { CheckCircle2, Clock, User, FileText, Printer, Utensils } from 'lucide-react';
 
 interface OrderSuccessModalProps {
@@ -22,11 +23,11 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
   if (!order) return null;
 
   const orderTimeStr = formatBaghdadTime(order.createdAt);
-  const shortOrderId = order.orderId ? order.orderId.slice(-6).toUpperCase() : '000000';
+  const orderNumDisplay = order.orderNumber || (order.orderId ? `#${order.orderId.slice(-4).toUpperCase()}` : '#001');
 
-  const handlePrint = () => {
+  const handlePrint = async () => {
     try {
-      window.print();
+      await iminPrinter.printReceipt(order, true);
     } catch (err) {
       console.error('Print trigger error:', err);
     }
@@ -40,7 +41,7 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
       <Modal
         isOpen={isOpen}
         onClose={onClose}
-        title="فرۆشتن بە سەرکەوتوویی تەواو کرا"
+        title="داواکاری بە سەرکەوتوویی نێردرا بۆ ئامادەکردن"
         icon={<CheckCircle2 className="w-6 h-6 text-emerald-500" />}
         size="md"
         footer={
@@ -52,7 +53,7 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
               className="gap-1.5 text-xs font-bold rounded-2xl print:hidden cursor-pointer"
             >
               <Printer className="w-4 h-4 text-gray-500" />
-              <span>چاپکردنی وەسڵ</span>
+              <span>چاپکردنەوەی پسوولە</span>
             </Button>
 
             <Button
@@ -74,8 +75,8 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
               <Utensils className="w-4 h-4 text-amber-600 shrink-0" />
               <span className="font-bold">داواکاریەکە نێردرا بۆ ئامادەکردن</span>
             </div>
-            <span className="text-[11px] font-mono font-bold bg-amber-100 text-amber-900 px-2 py-0.5 rounded-lg">
-              #{shortOrderId}
+            <span className="text-xs font-mono font-black bg-amber-100 text-amber-900 px-2.5 py-0.5 rounded-lg border border-amber-300">
+              {orderNumDisplay}
             </span>
           </div>
 
@@ -85,8 +86,13 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
             <div className="text-center space-y-1 pb-3 border-b border-orange-200">
               <h2 className="text-lg font-black text-gray-900">{APP_CONFIG.restaurantName}</h2>
               <p className="text-xs text-gray-500 font-semibold">{APP_CONFIG.systemName}</p>
-              <div className="inline-block px-2.5 py-0.5 mt-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-mono font-bold">
-                ژمارەی وەسڵ: #{shortOrderId}
+              <div className="inline-flex items-center gap-2 px-3 py-1 mt-1 bg-emerald-100 text-emerald-800 rounded-full text-xs font-mono font-bold">
+                <span>ژمارەی داواکاری: {orderNumDisplay}</span>
+                {order.tableNumber && (
+                  <span className="bg-emerald-200 px-2 py-0.2 rounded-full font-bold">
+                    مێز: {order.tableNumber}
+                  </span>
+                )}
               </div>
             </div>
 
@@ -94,10 +100,10 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
             <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 font-semibold pt-1">
               <div className="flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-                <span>کاتی فرۆشتن: <span dir="ltr">{orderTimeStr}</span></span>
+                <span>کات: <span dir="ltr">{orderTimeStr}</span></span>
               </div>
               <div className="flex items-center gap-1.5 justify-end">
-                <span>کاشێر: {order.createdByName || 'کاشێر'}</span>
+                <span>تۆمارکار: {order.createdByName || 'کاشێر'}</span>
                 <User className="w-3.5 h-3.5 text-orange-500 shrink-0" />
               </div>
             </div>
@@ -143,7 +149,7 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
 
             {/* Grand Total */}
             <div className="p-3 bg-white rounded-2xl border-2 border-emerald-200 flex items-center justify-between">
-              <span className="text-sm font-black text-gray-800">کۆی گشتی بڕی وەرگیراو:</span>
+              <span className="text-sm font-black text-gray-800">کۆی گشتی بڕ:</span>
               <span className="text-lg font-black text-emerald-600 font-mono">
                 {formatIQD(order.totalAmount)}
               </span>

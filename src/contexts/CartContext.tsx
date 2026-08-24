@@ -10,6 +10,8 @@ interface CartContextType {
   totalAmount: number;
   note: string;
   setNote: (note: string) => void;
+  tableNumber: string;
+  setTableNumber: (tableNumber: string) => void;
   addItem: (product: Product, portion?: Portion, customizations?: string[], quantity?: number) => void;
   increaseQuantity: (index: number) => void;
   decreaseQuantity: (index: number) => void;
@@ -25,6 +27,7 @@ const CartContext = createContext<CartContextType | undefined>(undefined);
 export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [items, setItems] = useState<CartItem[]>([]);
   const [note, setNote] = useState<string>('');
+  const [tableNumber, setTableNumber] = useState<string>('');
 
   const addItem = useCallback(
     (product: Product, portion: Portion = 'نەفەر', customizations: string[] = [], quantity: number = 1) => {
@@ -166,6 +169,7 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const clearCart = useCallback(() => {
     setItems([]);
     setNote('');
+    setTableNumber('');
   }, []);
 
   const { subtotal, totalAmount } = useMemo(() => {
@@ -185,6 +189,8 @@ export const CartProvider: React.FC<{ children: React.ReactNode }> = ({ children
         totalAmount,
         note,
         setNote,
+        tableNumber,
+        setTableNumber,
         addItem,
         increaseQuantity,
         decreaseQuantity,
