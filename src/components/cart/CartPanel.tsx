@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useCart } from '../../hooks/useCart';
 import { useAuth } from '../../hooks/useAuth';
+import { useShift } from '../../hooks/useShift';
 import { useToast } from '../../hooks/useToast';
 import { useProducts } from '../../hooks/useProducts';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
@@ -35,6 +36,7 @@ export const CartPanel: React.FC = () => {
   } = useCart();
 
   const { user, displayName, role } = useAuth();
+  const { activeShift } = useShift();
   const { isProductActive } = useProducts();
   const { showToast, error, warning } = useToast();
   const { isOnline } = useNetworkStatus();
@@ -90,6 +92,7 @@ export const CartPanel: React.FC = () => {
         note,
         tableNumber,
         source: orderSource,
+        shiftId: activeShift?.id,
         userId: user.uid,
         userName: displayName,
       });

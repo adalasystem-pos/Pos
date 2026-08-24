@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ExpenseCategory } from '../../types/expense';
 import { useAuth } from '../../hooks/useAuth';
+import { useShift } from '../../hooks/useShift';
 import { useToast } from '../../hooks/useToast';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { createExpense } from '../../services/expenses.service';
@@ -26,6 +27,7 @@ const CATEGORY_OPTIONS: { value: ExpenseCategory; label: string }[] = [
 
 export const ExpenseForm: React.FC<{ onExpenseAdded?: () => void }> = ({ onExpenseAdded }) => {
   const { user, displayName } = useAuth();
+  const { activeShift } = useShift();
   const { success, error } = useToast();
   const { isOnline } = useNetworkStatus();
 
@@ -66,6 +68,7 @@ export const ExpenseForm: React.FC<{ onExpenseAdded?: () => void }> = ({ onExpen
         amount,
         category,
         note,
+        shiftId: activeShift?.id,
         userId: user.uid,
         userName: displayName,
       });

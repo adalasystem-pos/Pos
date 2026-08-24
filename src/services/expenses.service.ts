@@ -20,6 +20,7 @@ export interface CreateExpenseParams {
   amount: number;
   category: ExpenseCategory;
   note?: string;
+  shiftId?: string;
   userId: string;
   userName?: string;
 }
@@ -28,7 +29,7 @@ export interface CreateExpenseParams {
  * Creates and records a business expense in Cloud Firestore.
  */
 export async function createExpense(params: CreateExpenseParams): Promise<Expense> {
-  const { amount, category, note = '', userId, userName = 'کاشێر' } = params;
+  const { amount, category, note = '', shiftId, userId, userName = 'کاشێر' } = params;
 
   if (!userId) {
     throw new Error('دەبێت بەکارهێنەر چووبێتە ژوورەوە بۆ تۆمارکردنی خەرجی');
@@ -52,6 +53,7 @@ export async function createExpense(params: CreateExpenseParams): Promise<Expens
     createdAt: serverTimestamp(),
     createdBy: userId,
     createdByName: userName,
+    ...(shiftId ? { shiftId } : {}),
     baghdadDate,
   };
 

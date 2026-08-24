@@ -18,5 +18,6 @@ export interface Expense {
   createdAt: any; // Firestore serverTimestamp / Timestamp
   createdBy: string; // Auth UID
   createdByName?: string;
+  shiftId?: string; // Optional reference to active operational shift
   baghdadDate?: string; // YYYY-MM-DD
 }

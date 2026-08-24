@@ -31,6 +31,7 @@ export interface CreateOrderParams {
   note?: string;
   tableNumber?: string;
   source?: OrderSource;
+  shiftId?: string;
   userId: string;
   userName?: string;
 }
@@ -52,6 +53,7 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
     note = '',
     tableNumber = '',
     source = 'pos',
+    shiftId,
     userId,
     userName = 'کاشێر',
   } = params;
@@ -140,6 +142,7 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
         createdAt: serverTimestamp(),
         createdBy: userId,
         createdByName: userName,
+        ...(shiftId ? { shiftId } : {}),
         baghdadDate,
         updatedAt: serverTimestamp(),
       };

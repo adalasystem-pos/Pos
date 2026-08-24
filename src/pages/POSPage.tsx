@@ -10,6 +10,7 @@ import { ProductGrid } from '../components/pos/ProductGrid';
 import { ProductModal } from '../components/pos/ProductModal';
 import { CartPanel } from '../components/cart/CartPanel';
 import { OrderPreparationQueue } from '../components/pos/OrderPreparationQueue';
+import { ShiftControlBar } from '../components/shift/ShiftControlBar';
 import { PageHeader } from '../components/layout/PageHeader';
 import { Search, ShoppingBag, UtensilsCrossed, LayoutGrid } from 'lucide-react';
 
@@ -141,6 +142,9 @@ export const POSPage: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* Operational Shift & Cash Control Bar */}
+      <ShiftControlBar />
 
       {activeSubView === 'queue' ? (
         /* Kitchen Preparation Queue View */
