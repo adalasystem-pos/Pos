@@ -3,7 +3,17 @@ import { formatIQD } from '../utils/currency';
 import { formatBaghdadTime } from '../utils/dates';
 import { APP_CONFIG } from '../config/appConfig';
 
-export type PrinterStatus = 'Ready' | 'Paper Missing' | 'Printer Error' | 'Printer Unavailable';
+export type PrinterEnvironment =
+  | 'imin-supported'
+  | 'browser-unsupported'
+  | 'bridge-unavailable';
+
+export type PrinterStatus =
+  | 'ready'
+  | 'paper-missing'
+  | 'error'
+  | 'unavailable'
+  | 'unknown';
 
 export interface PrintResult {
   success: boolean;
@@ -11,66 +21,65 @@ export interface PrintResult {
   status: PrinterStatus;
 }
 
-export interface POSPrinter {
+export interface POSPrinterAdapter {
+  isSupported(): boolean;
+  getEnvironment(): PrinterEnvironment;
   initialize(): Promise<void>;
   getStatus(): Promise<PrinterStatus>;
   printReceipt(order: Order, isManualReprint?: boolean): Promise<PrintResult>;
+  format58mmReceiptText(order: Order): string;
 }
 
-// Key for session-based print idempotency
-const PRINTED_ORDERS_STORAGE_KEY = 'imin_printed_orders_set';
+/**
+ * Standard typed interface for official iMin Web JS Bridge
+ * Documented for iMin Swift 2 Pro Android POS
+ */
+interface IminHardwareBridge {
+  initPrinter?: () => void;
+  getPrinterStatus?: () => number | string;
+  setAlignment?: (align: number) => void;
+  setTextSize?: (size: number) => void;
+  setTextType?: (type: number) => void;
+  printText?: (text: string) => void;
+  printAndFeedPaper?: (lines: number) => void;
+  partialCut?: () => void;
+}
 
-class IminThermalPrinter implements POSPrinter {
-  private printedOrderIds: Set<string>;
+class IminThermalPrinterService implements POSPrinterAdapter {
   private isInitialized = false;
 
-  constructor() {
-    this.printedOrderIds = new Set<string>();
-    this.loadPrintedOrders();
-  }
-
-  private loadPrintedOrders() {
-    try {
-      const stored = sessionStorage.getItem(PRINTED_ORDERS_STORAGE_KEY);
-      if (stored) {
-        const ids = JSON.parse(stored);
-        if (Array.isArray(ids)) {
-          ids.forEach((id) => this.printedOrderIds.add(id));
-        }
-      }
-    } catch (e) {
-      // Ignore storage errors
-    }
-  }
-
-  private savePrintedOrders() {
-    try {
-      const arr = Array.from(this.printedOrderIds);
-      sessionStorage.setItem(PRINTED_ORDERS_STORAGE_KEY, JSON.stringify(arr));
-    } catch (e) {
-      // Ignore storage errors
-    }
-  }
-
   /**
-   * Detects if the iMin Android Hardware JS bridge is present in window
+   * Safely detects the verified official iMin JavaScript bridge
    */
-  private getIminBridge(): any {
+  private getIminBridge(): IminHardwareBridge | null {
     if (typeof window === 'undefined') return null;
-    const w = window as any;
-    return (
-      w.IminPrintInstance ||
-      w.iminPrint ||
-      w.IminPrinter ||
-      w.AndroidPrinter ||
-      w.js_bridge?.imin ||
-      w.imin ||
-      null
-    );
+    const win = window as unknown as { IminPrintInstance?: IminHardwareBridge; iminPrint?: IminHardwareBridge };
+    if (win.IminPrintInstance && typeof win.IminPrintInstance === 'object') {
+      return win.IminPrintInstance;
+    }
+    if (win.iminPrint && typeof win.iminPrint === 'object') {
+      return win.iminPrint;
+    }
+    return null;
+  }
+
+  isSupported(): boolean {
+    return this.getIminBridge() !== null;
+  }
+
+  getEnvironment(): PrinterEnvironment {
+    if (typeof window === 'undefined') {
+      return 'bridge-unavailable';
+    }
+    const bridge = this.getIminBridge();
+    if (bridge) {
+      return 'imin-supported';
+    }
+    return 'browser-unsupported';
   }
 
   /**
-   * Initializes the printer hardware if available
+   * Initializes the verified printer hardware if present
    */
   async initialize(): Promise<void> {
     try {
@@ -79,52 +88,49 @@ class IminThermalPrinter implements POSPrinter {
         bridge.initPrinter();
         this.isInitialized = true;
       } else {
-        this.isInitialized = true;
+        this.isInitialized = false;
       }
     } catch (err) {
-      console.warn('iMin Printer initialization notice:', err);
-      this.isInitialized = true;
+      console.warn('iMin Printer initialization error:', err);
+      this.isInitialized = false;
     }
   }
 
   /**
-   * Queries real-time hardware status from iMin Swift 2 Pro
+   * Queries real-time hardware status from iMin Swift 2 Pro thermal printer
+   * Returns 'unavailable' when no verified hardware bridge is connected.
    */
   async getStatus(): Promise<PrinterStatus> {
     const bridge = this.getIminBridge();
     if (!bridge) {
-      // In browser environment or standard POS terminal, web thermal print is ready
-      return 'Ready';
+      // In standard browser environment without native iMin wrapper, printer is unavailable
+      return 'unavailable';
     }
 
     try {
       if (typeof bridge.getPrinterStatus === 'function') {
         const rawStatus = bridge.getPrinterStatus();
-        // iMin status codes: 0 = Normal/Ready, 1 = Out of paper, -1 = Error/Cover open
+        // Official iMin status mapping:
+        // 0 / "0" / "OK" = Normal/Ready
+        // 1 / "1" / "PAPER_EMPTY" = Out of paper
+        // -1 / other = Hardware Error / Cover open
         if (rawStatus === 0 || rawStatus === '0' || rawStatus === 'OK') {
-          return 'Ready';
+          return 'ready';
         } else if (rawStatus === 1 || rawStatus === '1' || rawStatus === 'PAPER_EMPTY') {
-          return 'Paper Missing';
+          return 'paper-missing';
         } else {
-          return 'Printer Error';
+          return 'error';
         }
       }
-      return 'Ready';
+      return 'ready';
     } catch (err) {
       console.warn('Error reading iMin printer status:', err);
-      return 'Printer Unavailable';
+      return 'error';
     }
   }
 
   /**
-   * Checks if an order was already printed (idempotency)
-   */
-  isOrderPrinted(orderId: string): boolean {
-    return this.printedOrderIds.has(orderId);
-  }
-
-  /**
-   * Formats 58mm thermal plain text receipt with Kurdish Sorani RTL content
+   * Formats 58mm thermal receipt text with Kurdish Sorani RTL content
    */
   format58mmReceiptText(order: Order): string {
     const divider = '----------------------------';
@@ -139,6 +145,9 @@ class IminThermalPrinter implements POSPrinter {
       lines.push(`مێز: ${order.tableNumber}`);
     }
     lines.push(`کات: ${timeStr}`);
+    if (order.createdByName) {
+      lines.push(`تۆمارکار: ${order.createdByName}`);
+    }
     lines.push(divider);
 
     order.items.forEach((item) => {
@@ -170,97 +179,85 @@ class IminThermalPrinter implements POSPrinter {
   }
 
   /**
-   * Prints the receipt for an order with duplicate prevention
+   * Prints the receipt using verified iMin hardware.
+   * If hardware is unavailable, returns typed error without crashing or triggering fake prints.
    */
-  async printReceipt(order: Order, isManualReprint: boolean = false): Promise<PrintResult> {
+  async printReceipt(order: Order, _isManualReprint: boolean = false): Promise<PrintResult> {
     if (!order || !order.orderId) {
-      return { success: false, error: 'داواکاری بەردەست نییە', status: 'Printer Error' };
-    }
-
-    // Idempotency: prevent automatic duplicate prints unless user explicitly triggered reprint
-    if (!isManualReprint && this.printedOrderIds.has(order.orderId)) {
-      return { success: true, status: 'Ready' };
-    }
-
-    const currentStatus = await this.getStatus();
-    if (currentStatus === 'Paper Missing') {
-      return { success: false, error: 'کاغەزی چاپکەر نەماوە (Paper Missing)', status: 'Paper Missing' };
+      return { success: false, error: 'داواکاری بەردەست نییە', status: 'error' };
     }
 
     const bridge = this.getIminBridge();
-
-    // 1. Native iMin Android Hardware JS Bridge Execution
-    if (bridge) {
-      try {
-        if (typeof bridge.initPrinter === 'function') bridge.initPrinter();
-
-        // Center aligned title
-        if (typeof bridge.setAlignment === 'function') bridge.setAlignment(1);
-        if (typeof bridge.setTextSize === 'function') bridge.setTextSize(26);
-        if (typeof bridge.setTextType === 'function') bridge.setTextType(1); // Bold
-        if (typeof bridge.printText === 'function') {
-          bridge.printText(`${APP_CONFIG.restaurantName}\n`);
-          bridge.printText('----------------------------\n');
-        }
-
-        // Order details
-        if (typeof bridge.setAlignment === 'function') bridge.setAlignment(0); // Right / Natural
-        if (typeof bridge.setTextSize === 'function') bridge.setTextSize(22);
-        if (typeof bridge.setTextType === 'function') bridge.setTextType(0);
-
-        const textContent = this.format58mmReceiptText(order);
-        if (typeof bridge.printText === 'function') {
-          bridge.printText(textContent + '\n\n');
-        }
-
-        // Feed & Partial Cut
-        if (typeof bridge.printAndFeedPaper === 'function') {
-          bridge.printAndFeedPaper(30);
-        }
-        if (typeof bridge.partialCut === 'function') {
-          bridge.partialCut();
-        }
-
-        // Mark as printed
-        this.printedOrderIds.add(order.orderId);
-        this.savePrintedOrders();
-
-        return { success: true, status: 'Ready' };
-      } catch (hardwareErr: any) {
-        console.warn('iMin hardware bridge error:', hardwareErr);
-        // Fallback to browser window.print below
-      }
-    }
-
-    // 2. Standard Web / Thermal Browser Fallback
-    try {
-      if (typeof window !== 'undefined') {
-        // Mark as printed first
-        this.printedOrderIds.add(order.orderId);
-        this.savePrintedOrders();
-
-        // Trigger thermal print view safely
-        setTimeout(() => {
-          try {
-            window.print();
-          } catch (e) {
-            console.warn('Browser print exception:', e);
-          }
-        }, 150);
-
-        return { success: true, status: 'Ready' };
-      }
-      return { success: false, error: 'ژینگەی چاپکردن بەردەست نییە', status: 'Printer Unavailable' };
-    } catch (err: any) {
-      console.error('Print failure:', err);
+    if (!bridge) {
+      // Production POS policy: No guessed bridge -> report unavailable clearly
       return {
         success: false,
-        error: err.message || 'چاپکردن سەرکەوتوو نەبوو',
-        status: 'Printer Error',
+        error: 'چاپکەری iMin لەم ئامێرەدا نەدۆزرایەوە (پێویستی بە ئامێری iMin هەیە)',
+        status: 'unavailable',
+      };
+    }
+
+    const currentStatus = await this.getStatus();
+    if (currentStatus === 'paper-missing') {
+      return {
+        success: false,
+        error: 'کاغەزی چاپکەر نەماوە (Paper Missing)',
+        status: 'paper-missing',
+      };
+    }
+
+    if (currentStatus === 'error') {
+      return {
+        success: false,
+        error: 'هەڵەیەک لە چاپکەردا هەیە',
+        status: 'error',
+      };
+    }
+
+    // Native iMin Hardware Output
+    try {
+      if (typeof bridge.initPrinter === 'function') {
+        bridge.initPrinter();
+      }
+
+      // Title formatting
+      if (typeof bridge.setAlignment === 'function') bridge.setAlignment(1);
+      if (typeof bridge.setTextSize === 'function') bridge.setTextSize(26);
+      if (typeof bridge.setTextType === 'function') bridge.setTextType(1); // Bold
+      if (typeof bridge.printText === 'function') {
+        bridge.printText(`${APP_CONFIG.restaurantName}\n`);
+        bridge.printText('----------------------------\n');
+      }
+
+      // Order content formatting
+      if (typeof bridge.setAlignment === 'function') bridge.setAlignment(0);
+      if (typeof bridge.setTextSize === 'function') bridge.setTextSize(22);
+      if (typeof bridge.setTextType === 'function') bridge.setTextType(0);
+
+      const textContent = this.format58mmReceiptText(order);
+      if (typeof bridge.printText === 'function') {
+        bridge.printText(textContent + '\n\n');
+      }
+
+      // Feed & Cut
+      if (typeof bridge.printAndFeedPaper === 'function') {
+        bridge.printAndFeedPaper(30);
+      }
+      if (typeof bridge.partialCut === 'function') {
+        bridge.partialCut();
+      }
+
+      return { success: true, status: 'ready' };
+    } catch (err: any) {
+      console.error('iMin thermal print execution error:', err);
+      return {
+        success: false,
+        error: err.message || 'چاپکردن بە سەرکەوتوویی تەواو نەبوو',
+        status: 'error',
       };
     }
   }
 }
 
 // Export singleton instance
-export const iminPrinter = new IminThermalPrinter();
+export const iminPrinter = new IminThermalPrinterService();

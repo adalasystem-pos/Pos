@@ -12,6 +12,7 @@ export interface CartItem {
 
 export type OrderStatus = 'preparing' | 'completed' | 'cancelled';
 export type OrderSource = 'captain' | 'pos';
+export type KitchenPrintStatus = 'pending' | 'printing' | 'printed' | 'failed';
 
 export interface Order {
   orderId: string;
@@ -23,6 +24,9 @@ export interface Order {
   subtotal: number; // Integer IQD
   totalAmount: number; // Integer IQD
   note: string;
+  kitchenPrintStatus?: KitchenPrintStatus;
+  kitchenPrintedAt?: any; // Firestore Timestamp
+  kitchenPrintAttempts?: number;
   createdAt: any; // Firestore serverTimestamp / Timestamp
   createdBy: string; // Auth UID
   createdByName?: string;

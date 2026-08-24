@@ -1,23 +1,23 @@
 import {
   collection,
   doc,
-  setDoc,
   updateDoc,
+  runTransaction,
   serverTimestamp,
   query,
   where,
-  orderBy,
   getDocs,
   onSnapshot,
   Timestamp,
 } from 'firebase/firestore';
 import { db } from './firebase';
-import { CartItem, Order, OrderStatus, OrderSource } from '../types/order';
+import { CartItem, Order, OrderStatus, OrderSource, KitchenPrintStatus } from '../types/order';
 import { calculateLineTotal, calculateOrderTotal } from '../utils/calculations';
 import { validateCart } from '../utils/validation';
 import { getBaghdadDateString, getBaghdadDayRange } from '../utils/dates';
 
 const ORDERS_COLLECTION = 'orders';
+const COUNTERS_COLLECTION = 'counters';
 
 export interface CreateOrderParams {
   items: CartItem[];
@@ -29,25 +29,9 @@ export interface CreateOrderParams {
 }
 
 /**
- * Generates a clean human-readable order number based on today's order sequence
- */
-async function generateOrderNumber(dateStr: string): Promise<string> {
-  try {
-    const ordersRef = collection(db, ORDERS_COLLECTION);
-    const q = query(ordersRef, where('baghdadDate', '==', dateStr));
-    const snapshot = await getDocs(q);
-    const count = snapshot.size + 1;
-    return `#${count.toString().padStart(3, '0')}`;
-  } catch (err) {
-    // Fallback based on timestamp if count fails
-    const timeSeq = (Date.now() % 1000).toString().padStart(3, '0');
-    return `#${timeSeq}`;
-  }
-}
-
-/**
- * Authoritatively creates and saves a new order to Cloud Firestore.
- * Recalculates all line totals and order totals to prevent tampering.
+ * Authoritatively creates and saves a new order in Cloud Firestore.
+ * Uses a Firestore atomic transaction to allocate the sequential order number (#001, #002)
+ * without race conditions across multiple POS/Captain devices.
  */
 export async function createOrder(params: CreateOrderParams): Promise<Order> {
   const {
@@ -89,41 +73,154 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
     throw new Error('کۆی گشتی داواکاری ناتوانێت سفر بێت');
   }
 
-  // 3. Generate unique order ID and human-readable sequence
+  const baghdadDate = getBaghdadDateString();
+  const counterDocRef = doc(db, COUNTERS_COLLECTION, `orders-${baghdadDate}`);
+  const ordersRef = collection(db, ORDERS_COLLECTION);
+  const newOrderDoc = doc(ordersRef);
+
   try {
-    const ordersRef = collection(db, ORDERS_COLLECTION);
-    const newOrderDoc = doc(ordersRef);
-    const baghdadDate = getBaghdadDateString();
-    const orderNumber = await generateOrderNumber(baghdadDate);
+    const createdOrder = await runTransaction(db, async (transaction) => {
+      // 3. Atomically read and increment sequence counter for today
+      const counterSnap = await transaction.get(counterDocRef);
+      let sequence = 1;
 
-    const orderPayload = {
-      orderId: newOrderDoc.id,
-      orderNumber,
-      source,
-      tableNumber: tableNumber.trim(),
-      items: verifiedItems,
-      subtotal,
-      totalAmount,
-      note: note.trim(),
-      status: 'preparing' as const,
-      createdAt: serverTimestamp(),
-      createdBy: userId,
-      createdByName: userName,
-      baghdadDate,
-      updatedAt: serverTimestamp(),
-    };
+      if (counterSnap.exists()) {
+        const counterData = counterSnap.data();
+        sequence = (counterData.sequence || 0) + 1;
+      }
 
-    // 4. Save to Firestore
-    await setDoc(newOrderDoc, orderPayload);
+      transaction.set(
+        counterDocRef,
+        {
+          sequence,
+          date: baghdadDate,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
 
-    // Return the created order model
-    return {
-      ...orderPayload,
-      createdAt: new Date(),
-    };
+      const orderNumber = `#${sequence.toString().padStart(3, '0')}`;
+
+      // 4. Construct authoritative Order payload
+      const orderPayload = {
+        orderId: newOrderDoc.id,
+        orderNumber,
+        source,
+        tableNumber: tableNumber.trim(),
+        items: verifiedItems,
+        subtotal,
+        totalAmount,
+        note: note.trim(),
+        status: 'preparing' as const,
+        kitchenPrintStatus: 'pending' as KitchenPrintStatus,
+        kitchenPrintAttempts: 0,
+        createdAt: serverTimestamp(),
+        createdBy: userId,
+        createdByName: userName,
+        baghdadDate,
+        updatedAt: serverTimestamp(),
+      };
+
+      transaction.set(newOrderDoc, orderPayload);
+
+      return {
+        ...orderPayload,
+        createdAt: new Date(),
+      };
+    });
+
+    return createdOrder as Order;
   } catch (error) {
-    console.error('Error creating order:', error);
+    console.error('Error creating order in transaction:', error);
     throw error;
+  }
+}
+
+/**
+ * Atomically claims an order for printing so that only ONE POS instance
+ * prints the receipt. Prevents duplicate prints.
+ */
+export async function claimOrderForPrinting(orderId: string): Promise<boolean> {
+  if (!orderId) return false;
+  const orderDocRef = doc(db, ORDERS_COLLECTION, orderId);
+
+  try {
+    return await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(orderDocRef);
+      if (!snap.exists()) return false;
+
+      const data = snap.data() as Order;
+
+      // Only claim if status is 'preparing' (or completed) and print status is pending or failed
+      const currentPrintStatus = data.kitchenPrintStatus || 'pending';
+      if (currentPrintStatus === 'printing' || currentPrintStatus === 'printed') {
+        return false;
+      }
+
+      transaction.update(orderDocRef, {
+        kitchenPrintStatus: 'printing',
+        kitchenPrintAttempts: (data.kitchenPrintAttempts || 0) + 1,
+        updatedAt: serverTimestamp(),
+      });
+
+      return true;
+    });
+  } catch (err) {
+    console.error('Error claiming order for printing:', err);
+    return false;
+  }
+}
+
+/**
+ * Atomically claims an order for a manual reprint request.
+ */
+export async function claimOrderForReprint(orderId: string): Promise<boolean> {
+  if (!orderId) return false;
+  const orderDocRef = doc(db, ORDERS_COLLECTION, orderId);
+
+  try {
+    return await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(orderDocRef);
+      if (!snap.exists()) return false;
+
+      const data = snap.data() as Order;
+
+      transaction.update(orderDocRef, {
+        kitchenPrintStatus: 'printing',
+        kitchenPrintAttempts: (data.kitchenPrintAttempts || 0) + 1,
+        updatedAt: serverTimestamp(),
+      });
+
+      return true;
+    });
+  } catch (err) {
+    console.error('Error claiming order for reprint:', err);
+    return false;
+  }
+}
+
+/**
+ * Updates the durable print status of an order after a print attempt.
+ */
+export async function markOrderPrintResult(orderId: string, success: boolean): Promise<void> {
+  if (!orderId) return;
+  const orderDocRef = doc(db, ORDERS_COLLECTION, orderId);
+
+  try {
+    if (success) {
+      await updateDoc(orderDocRef, {
+        kitchenPrintStatus: 'printed',
+        kitchenPrintedAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    } else {
+      await updateDoc(orderDocRef, {
+        kitchenPrintStatus: 'failed',
+        updatedAt: serverTimestamp(),
+      });
+    }
+  } catch (err) {
+    console.error('Error updating order print result:', err);
   }
 }
 
@@ -148,13 +245,9 @@ export async function getTodayOrders(targetDateStr?: string): Promise<Order[]> {
   const { start, end } = getBaghdadDayRange(dateStr);
 
   const ordersRef = collection(db, ORDERS_COLLECTION);
-  
-  // Try querying by baghdadDate first, or by timestamp range fallback
+
   try {
-    const q = query(
-      ordersRef,
-      where('baghdadDate', '==', dateStr)
-    );
+    const q = query(ordersRef, where('baghdadDate', '==', dateStr));
     const snapshot = await getDocs(q);
     const orders: Order[] = [];
     snapshot.forEach((d) => {
@@ -163,7 +256,6 @@ export async function getTodayOrders(targetDateStr?: string): Promise<Order[]> {
         orders.push(ord);
       }
     });
-    // Sort descending by creation
     return orders.sort((a, b) => {
       const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
       const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
@@ -200,10 +292,7 @@ export function listenTodayOrders(
 ) {
   const dateStr = targetDateStr || getBaghdadDateString();
   const ordersRef = collection(db, ORDERS_COLLECTION);
-  const q = query(
-    ordersRef,
-    where('baghdadDate', '==', dateStr)
-  );
+  const q = query(ordersRef, where('baghdadDate', '==', dateStr));
 
   return onSnapshot(
     q,

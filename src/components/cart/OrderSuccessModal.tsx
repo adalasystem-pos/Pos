@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Order } from '../../types/order';
 import { formatIQD } from '../../utils/currency';
 import { APP_CONFIG } from '../../config/appConfig';
@@ -6,7 +6,9 @@ import { Modal } from '../ui/Modal';
 import { Button } from '../ui/Button';
 import { PosReceipt } from '../pos/PosReceipt';
 import { formatBaghdadTime } from '../../utils/dates';
-import { iminPrinter } from '../../services/iminPrinter';
+import { useAuth } from '../../hooks/useAuth';
+import { usePOSRealtime } from '../../contexts/POSRealtimeContext';
+import { useToast } from '../../hooks/useToast';
 import { CheckCircle2, Clock, User, FileText, Printer, Utensils } from 'lucide-react';
 
 interface OrderSuccessModalProps {
@@ -20,18 +22,35 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
   isOpen,
   onClose,
 }) => {
+  const { role } = useAuth();
+  const { reprintOrder } = usePOSRealtime();
+  const { success, warning } = useToast();
+  const [isPrinting, setIsPrinting] = useState<boolean>(false);
+
   if (!order) return null;
 
   const orderTimeStr = formatBaghdadTime(order.createdAt);
-  const orderNumDisplay = order.orderNumber || (order.orderId ? `#${order.orderId.slice(-4).toUpperCase()}` : '#001');
+  const orderNumDisplay =
+    order.orderNumber || (order.orderId ? `#${order.orderId.slice(-4).toUpperCase()}` : '#001');
 
   const handlePrint = async () => {
     try {
-      await iminPrinter.printReceipt(order, true);
-    } catch (err) {
+      setIsPrinting(true);
+      const res = await reprintOrder(order);
+      if (res.success) {
+        success('پسوولەکە بە سەرکەوتوویی چاپکرایەوە');
+      } else {
+        warning(res.error || 'چاپکردنی پسوولە سەرکەوتوو نەبوو');
+      }
+    } catch (err: any) {
       console.error('Print trigger error:', err);
+      warning('هەڵەیەک لە چاپکردندا ڕوویدا');
+    } finally {
+      setIsPrinting(false);
     }
   };
+
+  const isCaptain = role === 'captain';
 
   return (
     <>
@@ -46,15 +65,20 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
         size="md"
         footer={
           <div className="flex items-center justify-between gap-3 w-full">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handlePrint}
-              className="gap-1.5 text-xs font-bold rounded-2xl print:hidden cursor-pointer"
-            >
-              <Printer className="w-4 h-4 text-gray-500" />
-              <span>چاپکردنەوەی پسوولە</span>
-            </Button>
+            {!isCaptain ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handlePrint}
+                isLoading={isPrinting}
+                className="gap-1.5 text-xs font-bold rounded-2xl print:hidden cursor-pointer"
+              >
+                <Printer className="w-4 h-4 text-gray-500" />
+                <span>چاپکردنەوەی پسوولە</span>
+              </Button>
+            ) : (
+              <div />
+            )}
 
             <Button
               id="order-success-confirm-btn"
@@ -100,7 +124,9 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
             <div className="grid grid-cols-2 gap-2 text-xs text-gray-600 font-semibold pt-1">
               <div className="flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-orange-500 shrink-0" />
-                <span>کات: <span dir="ltr">{orderTimeStr}</span></span>
+                <span>
+                  کات: <span dir="ltr">{orderTimeStr}</span>
+                </span>
               </div>
               <div className="flex items-center gap-1.5 justify-end">
                 <span>تۆمارکار: {order.createdByName || 'کاشێر'}</span>

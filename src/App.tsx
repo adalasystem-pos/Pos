@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ToastProvider } from './contexts/ToastContext';
 import { ProductsProvider } from './contexts/ProductsContext';
 import { CartProvider } from './contexts/CartContext';
+import { POSRealtimeProvider } from './contexts/POSRealtimeContext';
 import { AppShell } from './components/layout/AppShell';
 import { NavTab } from './components/navigation/BottomNavigation';
 import { POSPage } from './pages/POSPage';
@@ -44,7 +45,9 @@ export default function App() {
       <ToastProvider>
         <ProductsProvider>
           <CartProvider>
-            <MainAppContent />
+            <POSRealtimeProvider>
+              <MainAppContent />
+            </POSRealtimeProvider>
           </CartProvider>
         </ProductsProvider>
       </ToastProvider>

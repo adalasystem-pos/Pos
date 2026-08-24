@@ -5,7 +5,6 @@ import { useToast } from '../../hooks/useToast';
 import { useProducts } from '../../hooks/useProducts';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { createOrder } from '../../services/orders.service';
-import { iminPrinter } from '../../services/iminPrinter';
 import { Order } from '../../types/order';
 import { CartItemRow } from './CartItemRow';
 import { OrderSummary } from './OrderSummary';
@@ -113,17 +112,6 @@ export const CartPanel: React.FC = () => {
       // Step 6 & 7: Set completed order state and open modal
       setCompletedOrder(newOrder);
       setIsSuccessModalOpen(true);
-
-      // Step 8: Trigger POS thermal receipt print automatically
-      try {
-        const printRes = await iminPrinter.printReceipt(newOrder, false);
-        if (!printRes.success && printRes.status !== 'Ready') {
-          warning('داواکاری تۆمارکرا، بەڵام چاپکردنی پسوولە سەرکەوتوو نەبوو');
-        }
-      } catch (printErr) {
-        console.warn('Automatic print error:', printErr);
-        warning('داواکاری تۆمارکرا، بەڵام چاپکردنی پسوولە سەرکەوتوو نەبوو');
-      }
     } catch (err: any) {
       console.error('Order creation error:', err);
       // If saving fails: preserve cart and notify

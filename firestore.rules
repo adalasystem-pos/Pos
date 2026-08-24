@@ -12,6 +12,14 @@ service cloud.firestore {
       return isAuthenticated() && request.auth.uid == userId;
     }
 
+    // Counters Collection: Daily atomic order sequence counters
+    match /counters/{counterId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated()
+        && (request.resource.data.sequence is int || request.resource.data.sequence is number)
+        && request.resource.data.sequence > 0;
+    }
+
     // Products Collection: Menu items, pricing, portions, and availability status
     match /products/{productId} {
       allow read: if isAuthenticated();
@@ -23,7 +31,7 @@ service cloud.firestore {
       allow delete: if false; // Products should be disabled (active: false) rather than deleted to preserve referential integrity
     }
 
-    // Orders Collection: Real-time orders and POS receipts
+    // Orders Collection: Real-time orders, kitchen status, and POS receipts
     match /orders/{orderId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated()

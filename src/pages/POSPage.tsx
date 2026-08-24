@@ -1,8 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Product, ProductCategory, Portion } from '../types/product';
 import { DEFAULT_CATEGORIES } from '../data/products';
 import { useCart } from '../hooks/useCart';
 import { useProducts } from '../hooks/useProducts';
+import { usePOSRealtime } from '../contexts/POSRealtimeContext';
 import { useToast } from '../hooks/useToast';
 import { CategoryTabs } from '../components/pos/CategoryTabs';
 import { ProductGrid } from '../components/pos/ProductGrid';
@@ -10,12 +11,12 @@ import { ProductModal } from '../components/pos/ProductModal';
 import { CartPanel } from '../components/cart/CartPanel';
 import { OrderPreparationQueue } from '../components/pos/OrderPreparationQueue';
 import { PageHeader } from '../components/layout/PageHeader';
-import { listenActivePreparingOrders } from '../services/orders.service';
 import { Search, ShoppingBag, UtensilsCrossed, LayoutGrid } from 'lucide-react';
 
 export const POSPage: React.FC = () => {
   const { addItem, itemCount } = useCart();
-  const { products, loading: productsLoading } = useProducts();
+  const { products } = useProducts();
+  const { preparingCount } = usePOSRealtime();
   const { error: toastError } = useToast();
   const [categories] = useState<ProductCategory[]>(DEFAULT_CATEGORIES);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string>('all');
@@ -24,14 +25,6 @@ export const POSPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
   const [isMobileCartOpen, setIsMobileCartOpen] = useState<boolean>(false);
   const [activeSubView, setActiveSubView] = useState<'menu' | 'queue'>('menu');
-  const [preparingCount, setPreparingCount] = useState<number>(0);
-
-  useEffect(() => {
-    const unsub = listenActivePreparingOrders((orders) => {
-      setPreparingCount(orders.length);
-    });
-    return () => unsub();
-  }, []);
 
   // Filter products by category and search query
   const filteredProducts = useMemo(() => {
