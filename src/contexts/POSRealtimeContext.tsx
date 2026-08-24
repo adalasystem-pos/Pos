@@ -12,7 +12,13 @@ import {
   claimOrderForReprint,
   markOrderPrintResult,
 } from '../services/orders.service';
-import { iminPrinter, PrinterStatus, PrinterEnvironment, PrintResult } from '../services/iminPrinter.service';
+import {
+  iminPrinter,
+  PrinterStatus,
+  PrinterCapability,
+  PrinterEnvironment,
+  PrintResult,
+} from '../services/iminPrinter.service';
 import { playOrderNotificationChime } from '../utils/sound';
 import { formatIQD } from '../utils/currency';
 
@@ -32,6 +38,7 @@ interface POSRealtimeContextType {
   cancelOrder: (orderId: string, reason: string) => Promise<void>;
   reprintOrder: (order: Order) => Promise<PrintResult>;
   printerStatus: PrinterStatus;
+  printerCapability: PrinterCapability;
   printerEnvironment: PrinterEnvironment;
   refreshPrinterStatus: () => Promise<PrinterStatus>;
 }
@@ -40,22 +47,26 @@ const POSRealtimeContext = createContext<POSRealtimeContextType | undefined>(und
 
 export const POSRealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { user, role, displayName } = useAuth();
-  const { showToast, warning, success, error: toastError } = useToast();
+  const { showToast, warning } = useToast();
 
   const [activeOrders, setActiveOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [printerStatus, setPrinterStatus] = useState<PrinterStatus>('unavailable');
+  const [printerCapability, setPrinterCapability] = useState<PrinterCapability>('unsupported');
   const [printerEnvironment, setPrinterEnvironment] = useState<PrinterEnvironment>('browser-unsupported');
 
   const isFirstLoadRef = useRef<boolean>(true);
   const knownOrderIdsRef = useRef<Set<string>>(new Set());
   const knownStatusMapRef = useRef<Map<string, OrderStatus>>(new Map());
+  const inFlightPrintsRef = useRef<Set<string>>(new Set());
 
-  // Check and update printer environment & status
+  // Check and update printer capability, environment & hardware status
   const refreshPrinterStatus = useCallback(async (): Promise<PrinterStatus> => {
+    const capability = iminPrinter.getCapability();
     const env = iminPrinter.getEnvironment();
+    setPrinterCapability(capability);
     setPrinterEnvironment(env);
-    const status = await iminPrinter.getStatus();
+    const status = await iminPrinter.getHardwareState();
     setPrinterStatus(status);
     return status;
   }, []);
@@ -81,7 +92,7 @@ export const POSRealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ c
         setLoading(false);
 
         // 1. Initial Snapshot Protection:
-        // Populate known IDs and statuses without triggering notifications on first page load
+        // Populate known IDs and statuses without triggering notifications or duplicate prints on first page load
         if (isFirstLoadRef.current) {
           orders.forEach((ord) => {
             knownOrderIdsRef.current.add(ord.orderId);
@@ -117,21 +128,29 @@ export const POSRealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ c
                 6000
               );
 
-              // POS Atomic Print Claim & Execution (Only on initial creation)
-              try {
-                const claimed = await claimOrderForPrinting(ord.orderId);
-                if (claimed) {
-                  const printRes = await iminPrinter.printReceipt(ord, false);
-                  await markOrderPrintResult(ord.orderId, printRes.success);
-                  if (!printRes.success && printRes.status !== 'ready') {
-                    if (printRes.status === 'paper-missing') {
-                      warning('کاغەزی چاپکەر نەماوە (Paper Missing)');
+              // POS In-Flight Deduplication & Atomic Print Claim
+              if (!inFlightPrintsRef.current.has(ord.orderId)) {
+                inFlightPrintsRef.current.add(ord.orderId);
+                try {
+                  const claimed = await claimOrderForPrinting(ord.orderId);
+                  if (claimed) {
+                    const printRes = await iminPrinter.printReceipt(ord, false);
+                    await markOrderPrintResult(ord.orderId, printRes.success);
+
+                    if (!printRes.success) {
+                      if (printRes.hardwareState === 'paper-missing') {
+                        warning('کاغەزی چاپکەر نەماوە (Paper Missing)');
+                      } else if (printRes.status === 'failed') {
+                        console.warn('Auto print failed for order:', ord.orderId, printRes.error);
+                      }
                     }
                   }
+                } catch (printErr) {
+                  console.error('POS automatic print error:', printErr);
+                  await markOrderPrintResult(ord.orderId, false);
+                } finally {
+                  inFlightPrintsRef.current.delete(ord.orderId);
                 }
-              } catch (printErr) {
-                console.error('POS automatic print error:', printErr);
-                await markOrderPrintResult(ord.orderId, false);
               }
             }
           } else if (prevStatus && prevStatus !== ord.status) {
@@ -237,20 +256,53 @@ export const POSRealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ c
     [user, displayName, role]
   );
 
+  // Controlled Manual Reprint Handling with Deduplication & Explicit Status Return
   const reprintOrder = useCallback(async (order: Order): Promise<PrintResult> => {
+    const now = new Date().toISOString();
     if (!order || !order.orderId) {
-      return { success: false, error: 'داواکاری بەردەست نییە', status: 'error' };
+      return {
+        success: false,
+        status: 'failed',
+        capability: iminPrinter.getCapability(),
+        hardwareState: 'error',
+        error: 'داواکاری بەردەست نییە',
+        timestamp: now,
+      };
     }
+
+    // In-flight reprint guard for this specific order
+    if (inFlightPrintsRef.current.has(order.orderId)) {
+      return {
+        success: false,
+        status: 'failed',
+        capability: iminPrinter.getCapability(),
+        hardwareState: 'unavailable',
+        error: 'کرداری چاپکردن لە کاردایە، تکایە کەمێک چاوەڕوان بە',
+        timestamp: now,
+      };
+    }
+
+    inFlightPrintsRef.current.add(order.orderId);
 
     try {
       await claimOrderForReprint(order.orderId);
       const printRes = await iminPrinter.printReceipt(order, true);
       await markOrderPrintResult(order.orderId, printRes.success);
       return printRes;
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'چاپکردن سەرکەوتوو نەبوو';
       console.error('Reprint error:', err);
       await markOrderPrintResult(order.orderId, false);
-      return { success: false, error: err.message || 'چاپکردن سەرکەوتوو نەبوو', status: 'error' };
+      return {
+        success: false,
+        status: 'failed',
+        capability: iminPrinter.getCapability(),
+        hardwareState: 'error',
+        error: errorMsg,
+        timestamp: now,
+      };
+    } finally {
+      inFlightPrintsRef.current.delete(order.orderId);
     }
   }, []);
 
@@ -270,6 +322,7 @@ export const POSRealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ c
     cancelOrder,
     reprintOrder,
     printerStatus,
+    printerCapability,
     printerEnvironment,
     refreshPrinterStatus,
   };

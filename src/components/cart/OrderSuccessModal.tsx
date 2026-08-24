@@ -37,12 +37,14 @@ export const OrderSuccessModal: React.FC<OrderSuccessModalProps> = ({
     try {
       setIsPrinting(true);
       const res = await reprintOrder(order);
-      if (res.success) {
+      if (res.status === 'success') {
         success('پسوولەکە بە سەرکەوتوویی چاپکرایەوە');
+      } else if (res.status === 'unavailable' || res.status === 'unsupported') {
+        warning(res.error || 'چاپکەری iMin لەم ئامێرەدا نەدۆزرایەوە');
       } else {
-        warning(res.error || 'چاپکردنی پسوولە سەرکەوتوو نەبوو');
+        warning(res.error || 'چاپکردنی پسوولە سەرکەوتوو نەبوو (تکایە دووبارە هەوڵبدەرەوە)');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Print trigger error:', err);
       warning('هەڵەیەک لە چاپکردندا ڕوویدا');
     } finally {

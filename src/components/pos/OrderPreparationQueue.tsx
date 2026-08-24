@@ -180,12 +180,14 @@ export const OrderPreparationQueue: React.FC = () => {
     try {
       setPrintingOrderId(order.orderId);
       const res = await reprintOrder(order);
-      if (res.success) {
+      if (res.status === 'success') {
         success('پسوولەکە بە سەرکەوتوویی چاپکرایەوە');
+      } else if (res.status === 'unavailable' || res.status === 'unsupported') {
+        warning(res.error || 'چاپکەری iMin لەم ئامێرەدا نەدۆزرایەوە');
       } else {
-        warning(res.error || 'چاپکردنی پسوولە سەرکەوتوو نەبوو');
+        warning(res.error || 'چاپکردنی پسوولە سەرکەوتوو نەبوو (تکایە دووبارە هەوڵبدەرەوە)');
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Reprint error:', err);
       warning('هەڵەیەک لە چاپکردنی پسوولە ڕوویدا');
     } finally {

@@ -2,118 +2,128 @@ import { Order } from '../types/order';
 import { formatIQD } from '../utils/currency';
 import { formatBaghdadTime } from '../utils/dates';
 import { APP_CONFIG } from '../config/appConfig';
+import {
+  PrinterCapability,
+  PrinterHardwareState,
+  PrintStatus,
+  PrintResult,
+  IminPrinterBridge,
+  POSPrinterAdapter,
+} from '../types/printer';
 
-export type PrinterEnvironment =
-  | 'imin-supported'
-  | 'browser-unsupported'
-  | 'bridge-unavailable';
-
-export type PrinterStatus =
-  | 'ready'
-  | 'paper-missing'
-  | 'error'
-  | 'unavailable'
-  | 'unknown';
-
-export interface PrintResult {
-  success: boolean;
-  error?: string;
-  status: PrinterStatus;
-}
-
-export interface POSPrinterAdapter {
-  isSupported(): boolean;
-  getEnvironment(): PrinterEnvironment;
-  initialize(): Promise<void>;
-  getStatus(): Promise<PrinterStatus>;
-  printReceipt(order: Order, isManualReprint?: boolean): Promise<PrintResult>;
-  format58mmReceiptText(order: Order): string;
-}
-
-/**
- * Standard typed interface for official iMin Web JS Bridge
- * Documented for iMin Swift 2 Pro Android POS
- */
-interface IminHardwareBridge {
-  initPrinter?: () => void;
-  getPrinterStatus?: () => number | string;
-  setAlignment?: (align: number) => void;
-  setTextSize?: (size: number) => void;
-  setTextType?: (type: number) => void;
-  printText?: (text: string) => void;
-  printAndFeedPaper?: (lines: number) => void;
-  partialCut?: () => void;
-}
+// Legacy type aliases for backward compatibility across context consumers
+export type PrinterEnvironment = 'imin-supported' | 'browser-unsupported' | 'bridge-unavailable';
+export type PrinterStatus = PrinterHardwareState;
+export type { PrintResult, PrinterCapability, PrintStatus, PrinterHardwareState, IminPrinterBridge };
 
 class IminThermalPrinterService implements POSPrinterAdapter {
   private isInitialized = false;
 
   /**
-   * Safely detects the verified official iMin JavaScript bridge
+   * Safely detects the verified official iMin JavaScript bridge.
+   * Defends against undefined window, non-object wrappers, or missing methods.
    */
-  private getIminBridge(): IminHardwareBridge | null {
+  private getIminBridge(): IminPrinterBridge | null {
     if (typeof window === 'undefined') return null;
-    const win = window as unknown as { IminPrintInstance?: IminHardwareBridge; iminPrint?: IminHardwareBridge };
-    if (win.IminPrintInstance && typeof win.IminPrintInstance === 'object') {
-      return win.IminPrintInstance;
+
+    try {
+      const win = window as unknown as {
+        IminPrintInstance?: IminPrinterBridge;
+        iminPrint?: IminPrinterBridge;
+      };
+
+      if (win.IminPrintInstance && typeof win.IminPrintInstance === 'object') {
+        return win.IminPrintInstance;
+      }
+      if (win.iminPrint && typeof win.iminPrint === 'object') {
+        return win.iminPrint;
+      }
+    } catch (err) {
+      console.warn('Safe bridge detection caught error:', err);
     }
-    if (win.iminPrint && typeof win.iminPrint === 'object') {
-      return win.iminPrint;
-    }
+
     return null;
   }
 
-  isSupported(): boolean {
-    return this.getIminBridge() !== null;
+  /**
+   * Evaluates the active hardware environment and bridge capability.
+   */
+  getCapability(): PrinterCapability {
+    if (typeof window === 'undefined') {
+      return 'unavailable';
+    }
+
+    const bridge = this.getIminBridge();
+    if (!bridge) {
+      return 'unsupported';
+    }
+
+    if (typeof bridge.printText === 'function') {
+      return 'verified';
+    }
+
+    return 'available';
   }
 
+  /**
+   * Returns true if verified iMin hardware printing is supported on the current device.
+   */
+  isSupported(): boolean {
+    const cap = this.getCapability();
+    return cap === 'verified' || cap === 'available';
+  }
+
+  /**
+   * Legacy environment string for backwards compatibility
+   */
   getEnvironment(): PrinterEnvironment {
-    if (typeof window === 'undefined') {
-      return 'bridge-unavailable';
-    }
-    const bridge = this.getIminBridge();
-    if (bridge) {
+    const cap = this.getCapability();
+    if (cap === 'verified' || cap === 'available') {
       return 'imin-supported';
+    }
+    if (cap === 'unavailable') {
+      return 'bridge-unavailable';
     }
     return 'browser-unsupported';
   }
 
   /**
-   * Initializes the verified printer hardware if present
+   * Initializes the verified printer hardware if present.
    */
-  async initialize(): Promise<void> {
+  async initialize(): Promise<boolean> {
     try {
       const bridge = this.getIminBridge();
       if (bridge && typeof bridge.initPrinter === 'function') {
         bridge.initPrinter();
         this.isInitialized = true;
-      } else {
-        this.isInitialized = false;
+        return true;
       }
+      this.isInitialized = false;
+      return false;
     } catch (err) {
       console.warn('iMin Printer initialization error:', err);
       this.isInitialized = false;
+      return false;
     }
   }
 
   /**
-   * Queries real-time hardware status from iMin Swift 2 Pro thermal printer
-   * Returns 'unavailable' when no verified hardware bridge is connected.
+   * Queries real-time hardware status from iMin Swift 2 Pro thermal printer.
+   * Returns 'unavailable' when running in standard browser without hardware bridge.
    */
-  async getStatus(): Promise<PrinterStatus> {
+  async getHardwareState(): Promise<PrinterHardwareState> {
     const bridge = this.getIminBridge();
     if (!bridge) {
-      // In standard browser environment without native iMin wrapper, printer is unavailable
       return 'unavailable';
     }
 
     try {
       if (typeof bridge.getPrinterStatus === 'function') {
         const rawStatus = bridge.getPrinterStatus();
-        // Official iMin status mapping:
-        // 0 / "0" / "OK" = Normal/Ready
-        // 1 / "1" / "PAPER_EMPTY" = Out of paper
-        // -1 / other = Hardware Error / Cover open
+        // Official iMin status code mapping:
+        // 0 / "0" / "OK" = Normal / Ready to print
+        // 1 / "1" / "PAPER_EMPTY" = Out of 58mm thermal paper
+        // -1 / other = Hardware Error / Cover open / Overheated
         if (rawStatus === 0 || rawStatus === '0' || rawStatus === 'OK') {
           return 'ready';
         } else if (rawStatus === 1 || rawStatus === '1' || rawStatus === 'PAPER_EMPTY') {
@@ -130,11 +140,20 @@ class IminThermalPrinterService implements POSPrinterAdapter {
   }
 
   /**
-   * Formats 58mm thermal receipt text with Kurdish Sorani RTL content
+   * Alias for backward compatibility
+   */
+  async getStatus(): Promise<PrinterStatus> {
+    return this.getHardwareState();
+  }
+
+  /**
+   * Formats 58mm thermal receipt text with Kurdish Sorani RTL content.
+   * Preserves exact items, quantities, customizations, notes, totals, and branding.
    */
   format58mmReceiptText(order: Order): string {
     const divider = '----------------------------';
-    const orderNum = order.orderNumber || (order.orderId ? `#${order.orderId.slice(-4).toUpperCase()}` : '#001');
+    const orderNum =
+      order.orderNumber || (order.orderId ? `#${order.orderId.slice(-4).toUpperCase()}` : '#001');
     const timeStr = formatBaghdadTime(order.createdAt);
     const lines: string[] = [];
 
@@ -180,41 +199,66 @@ class IminThermalPrinterService implements POSPrinterAdapter {
 
   /**
    * Prints the receipt using verified iMin hardware.
-   * If hardware is unavailable, returns typed error without crashing or triggering fake prints.
+   *
+   * Flow:
+   * 1. Validate order
+   * 2. Capability check
+   * 3. Hardware state check
+   * 4. Bridge execution
+   * 5. Deterministic PrintResult return
    */
   async printReceipt(order: Order, _isManualReprint: boolean = false): Promise<PrintResult> {
+    const now = new Date().toISOString();
+    const capability = this.getCapability();
+
     if (!order || !order.orderId) {
-      return { success: false, error: 'داواکاری بەردەست نییە', status: 'error' };
+      return {
+        success: false,
+        status: 'failed',
+        capability,
+        hardwareState: 'error',
+        error: 'داواکاری بەردەست نییە',
+        timestamp: now,
+      };
     }
 
     const bridge = this.getIminBridge();
-    if (!bridge) {
-      // Production POS policy: No guessed bridge -> report unavailable clearly
+    if (!bridge || capability === 'unsupported' || capability === 'unavailable') {
+      // Safe fallback: report unavailable clearly without throwing or faking success
       return {
         success: false,
-        error: 'چاپکەری iMin لەم ئامێرەدا نەدۆزرایەوە (پێویستی بە ئامێری iMin هەیە)',
         status: 'unavailable',
+        capability,
+        hardwareState: 'unavailable',
+        error: 'چاپکەری iMin لەم ئامێرەدا نەدۆزرایەوە (پێویستی بە ئامێری iMin هەیە)',
+        timestamp: now,
       };
     }
 
-    const currentStatus = await this.getStatus();
-    if (currentStatus === 'paper-missing') {
+    const hardwareState = await this.getHardwareState();
+    if (hardwareState === 'paper-missing') {
       return {
         success: false,
+        status: 'failed',
+        capability,
+        hardwareState: 'paper-missing',
         error: 'کاغەزی چاپکەر نەماوە (Paper Missing)',
-        status: 'paper-missing',
+        timestamp: now,
       };
     }
 
-    if (currentStatus === 'error') {
+    if (hardwareState === 'error') {
       return {
         success: false,
-        error: 'هەڵەیەک لە چاپکەردا هەیە',
-        status: 'error',
+        status: 'failed',
+        capability,
+        hardwareState: 'error',
+        error: 'هەڵەیەک لە چاپکەردا هەیە (Hardware Error)',
+        timestamp: now,
       };
     }
 
-    // Native iMin Hardware Output
+    // Native iMin Hardware Execution
     try {
       if (typeof bridge.initPrinter === 'function') {
         bridge.initPrinter();
@@ -247,13 +291,23 @@ class IminThermalPrinterService implements POSPrinterAdapter {
         bridge.partialCut();
       }
 
-      return { success: true, status: 'ready' };
-    } catch (err: any) {
+      return {
+        success: true,
+        status: 'success',
+        capability: 'verified',
+        hardwareState: 'ready',
+        timestamp: now,
+      };
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'چاپکردن بە سەرکەوتوویی تەواو نەبوو';
       console.error('iMin thermal print execution error:', err);
       return {
         success: false,
-        error: err.message || 'چاپکردن بە سەرکەوتوویی تەواو نەبوو',
-        status: 'error',
+        status: 'failed',
+        capability: 'verified',
+        hardwareState: 'error',
+        error: errorMsg,
+        timestamp: now,
       };
     }
   }

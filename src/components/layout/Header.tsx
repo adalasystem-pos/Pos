@@ -1,13 +1,15 @@
 import React from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
+import { usePOSRealtime } from '../../contexts/POSRealtimeContext';
 import { APP_CONFIG } from '../../config/appConfig';
-import { Flame, LogOut, User as UserIcon, Clock, Download, Smartphone } from 'lucide-react';
+import { Flame, LogOut, User as UserIcon, Clock, Download, Smartphone, Printer } from 'lucide-react';
 import { getBaghdadDateString, formatBaghdadTime } from '../../utils/dates';
 
 export const Header: React.FC = () => {
   const { displayName, role, logout } = useAuth();
   const { isInstallable, isInstalled, promptInstall } = usePWAInstall();
+  const { printerStatus, printerCapability, refreshPrinterStatus } = usePOSRealtime();
   const [currentTime, setCurrentTime] = React.useState(formatBaghdadTime(new Date()));
   const baghdadDate = getBaghdadDateString();
 
@@ -17,6 +19,9 @@ export const Header: React.FC = () => {
     }, 15000);
     return () => clearInterval(timer);
   }, []);
+
+  const isCaptain = role === 'captain';
+  const isHardwareVerified = printerCapability === 'verified' || printerCapability === 'available';
 
   return (
     <header
@@ -57,6 +62,57 @@ export const Header: React.FC = () => {
 
       {/* User profile & actions */}
       <div className="flex items-center gap-2.5 sm:gap-4">
+        {/* Minimal Hardware Printer Status (for POS/Cashier/Admin staff) */}
+        {!isCaptain && (
+          <>
+            {isHardwareVerified ? (
+              printerStatus === 'ready' ? (
+                <button
+                  id="header-printer-status-ready"
+                  type="button"
+                  onClick={() => refreshPrinterStatus()}
+                  title="چاپکەری iMin پەیوەستە و ئامادەیە (کرتە بکە بۆ پشکنینەوە)"
+                  className="hidden md:flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer shadow-2xs"
+                >
+                  <Printer className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>چاپکەر ئامادەیە</span>
+                </button>
+              ) : printerStatus === 'paper-missing' ? (
+                <button
+                  id="header-printer-status-paper"
+                  type="button"
+                  onClick={() => refreshPrinterStatus()}
+                  title="کاغەزی چاپکەر نییە (کرتە بکە بۆ پشکنینەوە)"
+                  className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-2.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer shadow-2xs animate-pulse"
+                >
+                  <Printer className="w-3.5 h-3.5 text-amber-600" />
+                  <span>کاغەزی چاپکەر نییە</span>
+                </button>
+              ) : (
+                <button
+                  id="header-printer-status-error"
+                  type="button"
+                  onClick={() => refreshPrinterStatus()}
+                  title="هەڵە لە چاپکەردا هەیە (کرتە بکە بۆ پشکنینەوە)"
+                  className="flex items-center gap-1.5 text-xs text-red-700 bg-red-50 hover:bg-red-100 border border-red-200 px-2.5 py-1.5 rounded-xl font-bold transition-all cursor-pointer shadow-2xs"
+                >
+                  <Printer className="w-3.5 h-3.5 text-red-600" />
+                  <span>هەڵەی چاپکەر</span>
+                </button>
+              )
+            ) : (
+              <div
+                id="header-printer-status-unavailable"
+                title="چاپکەری iMin لەم ئامێرەدا نەدۆزرایەوە (پێویستی بە ئامێری iMin هەیە)"
+                className="hidden xl:flex items-center gap-1 text-[11px] text-gray-500 bg-gray-50 border border-gray-200 px-2 py-1 rounded-xl font-semibold"
+              >
+                <Printer className="w-3 h-3 text-gray-400" />
+                <span>چاپکەر بەردەست نییە</span>
+              </div>
+            )}
+          </>
+        )}
+
         {/* PWA Install Button if available */}
         {isInstallable && (
           <button
