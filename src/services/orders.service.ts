@@ -225,12 +225,20 @@ export async function transitionOrderStatus(
       ? [...orderData.statusHistory]
       : [];
 
+    const defaultNotes: Record<OrderStatus, string> = {
+      preparing: 'لە ئامادەکردندایە',
+      ready: 'ئامادەیە بۆ گەیاندن',
+      served: 'پێشکەش کرا بە مێز',
+      completed: 'تەواوکرا و پارە درا',
+      cancelled: cancelReason?.trim() || 'داواکاری هەڵوەشێندرایەوە',
+    };
+
     const newHistoryItem: OrderStatusHistoryItem = {
       status: targetStatus,
       changedAt: new Date().toISOString(),
       changedBy: user.uid,
       changedByName: user.name || 'کارمەند',
-      note: cancelReason ? cancelReason.trim() : undefined,
+      note: cancelReason?.trim() || defaultNotes[targetStatus] || '',
     };
 
     const updatePayload: Record<string, any> = {

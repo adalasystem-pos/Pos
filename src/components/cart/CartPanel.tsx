@@ -19,7 +19,12 @@ import { ShoppingBag, Trash2, CheckCircle2, MessageSquare, UtensilsCrossed } fro
 
 const COMMON_TABLES = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', 'هۆڵ', 'سەفەری'];
 
-export const CartPanel: React.FC = () => {
+interface CartPanelProps {
+  isMobileDrawer?: boolean;
+  onClose?: () => void;
+}
+
+export const CartPanel: React.FC<CartPanelProps> = ({ isMobileDrawer = false, onClose }) => {
   const {
     items,
     itemCount,
@@ -129,40 +134,44 @@ export const CartPanel: React.FC = () => {
   return (
     <div
       id="pos-cart-panel"
-      className="flex flex-col h-full bg-white rounded-3xl border-2 border-orange-100 shadow-lg overflow-hidden"
+      className={`flex flex-col h-full min-h-0 bg-white ${
+        isMobileDrawer ? 'rounded-none border-0 shadow-none' : 'rounded-3xl border-2 border-orange-100 shadow-lg'
+      } overflow-hidden`}
     >
-      {/* Cart Header */}
-      <div className="p-4 sm:p-5 bg-white border-b border-orange-100 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-orange-100 text-orange-600 rounded-xl font-bold shadow-2xs">
-            <ShoppingBag className="w-5 h-5" />
+      {/* Cart Header (only shown if not already framed by mobile drawer header) */}
+      {!isMobileDrawer && (
+        <div className="shrink-0 p-4 sm:p-5 bg-white border-b border-orange-100 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-orange-100 text-orange-600 rounded-xl font-bold shadow-2xs">
+              <ShoppingBag className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-black text-base text-gray-800">سەبەتەی داواکاری</h3>
+              <span className="text-xs text-orange-600 font-bold">
+                {itemCount > 0 ? `${itemCount} بڕگە دیاریکراوە` : 'سەبەتە بەتاڵە'}
+              </span>
+            </div>
           </div>
-          <div>
-            <h3 className="font-black text-base text-gray-800">سەبەتەی داواکاری</h3>
-            <span className="text-xs text-orange-600 font-bold">
-              {itemCount > 0 ? `${itemCount} بڕگە دیاریکراوە` : 'سەبەتە بەتاڵە'}
-            </span>
-          </div>
+
+          {items.length > 0 && (
+            <button
+              id="clear-cart-btn"
+              type="button"
+              onClick={() => setIsClearConfirmOpen(true)}
+              className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-600 transition-colors p-2 rounded-xl hover:bg-red-50 cursor-pointer font-bold"
+              title="سڕینەوەی هەموو سەبەتە"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>بەتاڵکردن</span>
+            </button>
+          )}
         </div>
+      )}
 
-        {items.length > 0 && (
-          <button
-            id="clear-cart-btn"
-            type="button"
-            onClick={() => setIsClearConfirmOpen(true)}
-            className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-600 transition-colors p-2 rounded-xl hover:bg-red-50 cursor-pointer font-bold"
-            title="سڕینەوەی هەموو سەبەتە"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>بەتاڵکردن</span>
-          </button>
-        )}
-      </div>
-
-      {/* Cart Items List */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2.5 max-h-[calc(100vh-420px)] md:max-h-none">
+      {/* Cart Items List - Vertically constrained & independently scrollable */}
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-3.5 sm:p-4 space-y-2.5">
         {items.length === 0 ? (
-          <div className="py-12">
+          <div className="py-8 sm:py-12">
             <EmptyState
               title="سەبەتە بەتاڵە"
               description="خواردن یان کاڵایەک لە لیستی تەنیشت دیاری بکە بۆ ئەوەی لێرەدا دەربکەوێت."
@@ -170,22 +179,38 @@ export const CartPanel: React.FC = () => {
             />
           </div>
         ) : (
-          items.map((item, idx) => (
-            <CartItemRow
-              key={`${item.productId}-${item.portion}-${idx}`}
-              item={item}
-              index={idx}
-              onIncrease={increaseQuantity}
-              onDecrease={decreaseQuantity}
-              onRemove={removeItem}
-            />
-          ))
+          <>
+            {isMobileDrawer && (
+              <div className="flex items-center justify-between pb-1 border-b border-orange-100/60">
+                <span className="text-xs font-bold text-gray-500">{itemCount} بڕگە لە سەبەتەدا</span>
+                <button
+                  id="mobile-clear-cart-btn"
+                  type="button"
+                  onClick={() => setIsClearConfirmOpen(true)}
+                  className="flex items-center gap-1 text-xs text-gray-400 hover:text-red-600 transition-colors py-1 px-2 rounded-lg hover:bg-red-50 cursor-pointer font-bold"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>بەتاڵکردن</span>
+                </button>
+              </div>
+            )}
+            {items.map((item, idx) => (
+              <CartItemRow
+                key={`${item.productId}-${item.portion}-${idx}`}
+                item={item}
+                index={idx}
+                onIncrease={increaseQuantity}
+                onDecrease={decreaseQuantity}
+                onRemove={removeItem}
+              />
+            ))}
+          </>
         )}
       </div>
 
-      {/* Table Selection, Note & Bottom Summary */}
+      {/* Table Selection, Note & Bottom Summary - Pinned at bottom, always reachable */}
       {items.length > 0 && (
-        <div className="p-4 sm:p-5 bg-white border-t border-orange-100 space-y-3">
+        <div className="shrink-0 p-3.5 sm:p-4 bg-white border-t border-orange-100 space-y-2.5 sm:space-y-3 safe-area-pb shadow-[0_-4px_12px_rgba(0,0,0,0.03)] z-10">
           {/* Table Number Field */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
@@ -197,7 +222,7 @@ export const CartPanel: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setTableNumber('')}
-                  className="text-[10px] text-gray-400 hover:text-red-500 font-bold"
+                  className="text-[10px] text-gray-400 hover:text-red-500 font-bold cursor-pointer"
                 >
                   پاککردنەوە
                 </button>
@@ -211,7 +236,7 @@ export const CartPanel: React.FC = () => {
                 value={tableNumber}
                 onChange={(e) => setTableNumber(e.target.value)}
                 placeholder="ژمارەی مێز (نموونە: 12)..."
-                className="min-w-[110px] flex-1 px-3 py-1.5 text-xs font-bold rounded-xl border border-orange-200 bg-orange-50/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-300 text-right text-gray-800"
+                className="min-w-[100px] sm:min-w-[110px] flex-1 px-3 py-1.5 text-xs font-bold rounded-xl border border-orange-200 bg-orange-50/40 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-300 text-right text-gray-800"
               />
               <div className="flex items-center gap-1 shrink-0">
                 {COMMON_TABLES.slice(0, 6).map((tbl) => (
@@ -243,7 +268,7 @@ export const CartPanel: React.FC = () => {
               value={note}
               onChange={(e) => setNote(e.target.value)}
               placeholder="تێبینی بۆ چێشتخانە (ئارەزوومەندانە)..."
-              className="w-full pr-9 pl-3.5 py-2 text-xs font-semibold rounded-2xl border border-orange-100 bg-orange-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-300 text-right text-gray-800"
+              className="w-full pr-9 pl-3.5 py-1.5 sm:py-2 text-xs font-semibold rounded-2xl border border-orange-100 bg-orange-50/50 focus:bg-white focus:outline-none focus:ring-2 focus:ring-orange-300 text-right text-gray-800"
             />
           </div>
 
@@ -263,7 +288,7 @@ export const CartPanel: React.FC = () => {
             onClick={handleCompleteOrder}
             isLoading={isSubmitting}
             disabled={!isOnline || items.length === 0}
-            className="w-full bg-orange-500 text-white font-black py-3.5 sm:py-4 rounded-2xl text-base sm:text-lg custom-shadow hover:bg-orange-600 active:translate-y-1 active:shadow-none transition-all gap-2"
+            className="w-full bg-orange-500 text-white font-black py-3 sm:py-3.5 rounded-2xl text-sm sm:text-base custom-shadow hover:bg-orange-600 active:translate-y-1 active:shadow-none transition-all gap-2 cursor-pointer"
           >
             <CheckCircle2 className="w-5 h-5" />
             <span>ناردن بۆ ئامادەکردن</span>

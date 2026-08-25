@@ -169,9 +169,9 @@ export const POSPage: React.FC = () => {
             />
           </div>
 
-          {/* Right: Cart Panel (4 cols on lg, sticky on desktop) */}
+          {/* Right: Cart Panel (4 cols on lg, sticky on desktop/iPad landscape) */}
           <div className="hidden lg:block lg:col-span-5 xl:col-span-4 sticky top-20">
-            <div className="h-[calc(100vh-120px)]">
+            <div className="h-[calc(100dvh-120px)] min-h-[520px]">
               <CartPanel />
             </div>
           </div>
@@ -198,22 +198,47 @@ export const POSPage: React.FC = () => {
         </div>
       )}
 
-      {/* Mobile Cart Drawer Modal */}
+      {/* Mobile & Tablet Cart Drawer Modal */}
       {isMobileCartOpen && activeSubView === 'menu' && (
-        <div className="lg:hidden fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex flex-col justify-end">
-          <div className="bg-white rounded-t-3xl max-h-[88vh] flex flex-col overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-200">
-            <div className="p-3.5 bg-orange-50 border-b border-orange-100 flex justify-between items-center">
-              <span className="text-xs font-bold text-gray-700">سەبەتەی داواکاری</span>
+        <div
+          id="mobile-cart-backdrop"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsMobileCartOpen(false);
+            }
+          }}
+          className="lg:hidden fixed inset-0 z-[60] bg-black/60 backdrop-blur-xs flex flex-col justify-end"
+        >
+          <div
+            id="mobile-cart-drawer"
+            className="bg-white rounded-t-3xl h-[92dvh] max-h-[92dvh] sm:h-[88dvh] sm:max-h-[88dvh] flex flex-col min-h-0 overflow-hidden shadow-2xl animate-in slide-in-from-bottom duration-200"
+          >
+            {/* Drawer Drag handle & Header */}
+            <div className="p-3 bg-orange-50 border-b border-orange-100 flex justify-between items-center shrink-0">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 bg-orange-500 text-white rounded-xl font-bold shadow-2xs">
+                  <ShoppingBag className="w-4 h-4" />
+                </div>
+                <span className="text-sm font-black text-gray-800">سەبەتەی داواکاری</span>
+                {itemCount > 0 && (
+                  <span className="text-xs font-bold text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">
+                    {itemCount} دانە
+                  </span>
+                )}
+              </div>
               <button
+                id="close-mobile-cart-btn"
                 type="button"
                 onClick={() => setIsMobileCartOpen(false)}
-                className="text-xs font-bold text-orange-600 bg-white px-3 py-1 rounded-xl border border-orange-200 cursor-pointer"
+                className="text-xs font-bold text-orange-600 bg-white px-3.5 py-1.5 rounded-xl border border-orange-200 hover:bg-orange-50 active:scale-95 transition-all cursor-pointer shadow-2xs"
               >
                 داخستن
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto">
-              <CartPanel />
+
+            {/* Direct vertically-constrained CartPanel */}
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+              <CartPanel isMobileDrawer={true} onClose={() => setIsMobileCartOpen(false)} />
             </div>
           </div>
         </div>
