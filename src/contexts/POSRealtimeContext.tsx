@@ -8,6 +8,7 @@ import {
   markOrderServed as serviceMarkOrderServed,
   completeOrder as serviceCompleteOrder,
   cancelOrder as serviceCancelOrder,
+  acknowledgeKitchenOrder as serviceAcknowledgeKitchenOrder,
   claimOrderForPrinting,
   claimOrderForReprint,
   markOrderPrintResult,
@@ -36,6 +37,7 @@ interface POSRealtimeContextType {
   markOrderServed: (orderId: string) => Promise<void>;
   completeOrder: (orderId: string) => Promise<void>;
   cancelOrder: (orderId: string, reason: string) => Promise<void>;
+  acknowledgeOrder: (orderId: string) => Promise<void>;
   reprintOrder: (order: Order) => Promise<PrintResult>;
   printerStatus: PrinterStatus;
   printerCapability: PrinterCapability;
@@ -125,7 +127,22 @@ export const POSRealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ c
                 `ژمارەی داواکاری: ${orderNum}${tableMsg}${sourceMsg} • کۆ: ${formatIQD(ord.totalAmount)}`,
                 'info',
                 'داواکارییەکی نوێ هات!',
-                6000
+                8000,
+                {
+                  label: 'بینی',
+                  id: `ack-order-notification-${ord.orderId}`,
+                  onClick: () => {
+                    // Smoothly highlight and scroll to order if in preparation view
+                    const orderEl = document.getElementById(`prep-order-${ord.orderId}`);
+                    if (orderEl) {
+                      orderEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      orderEl.classList.add('ring-4', 'ring-orange-400');
+                      setTimeout(() => {
+                        orderEl.classList.remove('ring-4', 'ring-orange-400');
+                      }, 2000);
+                    }
+                  },
+                }
               );
 
               // POS In-Flight Deduplication & Atomic Print Claim
@@ -154,26 +171,8 @@ export const POSRealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ c
               }
             }
           } else if (prevStatus && prevStatus !== ord.status) {
-            // Status Transition Notifications (NO automatic reprint triggered!)
+            // Update known status map if historical/external status changes occur
             knownStatusMapRef.current.set(ord.orderId, ord.status);
-
-            if (ord.status === 'ready') {
-              // Notify when order is ready from kitchen
-              showToast(
-                `داواکاری ${orderNum}${tableMsg} ئامادەیە بۆ پێشکەشکردن`,
-                'success',
-                'داواکاری ئامادەیە!',
-                5000
-              );
-            } else if (ord.status === 'served') {
-              // Notify when order is served to the table
-              showToast(
-                `داواکاری ${orderNum}${tableMsg} گەیەنرا بە کڕیار`,
-                'info',
-                'داواکاری گەیەنرا',
-                4000
-              );
-            }
           }
         }
       },
@@ -256,6 +255,17 @@ export const POSRealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ c
     [user, displayName, role]
   );
 
+  const acknowledgeOrder = useCallback(
+    async (orderId: string) => {
+      if (!user) throw new Error('دەبێت بەکارهێنەر چووبێتە ژوورەوە');
+      await serviceAcknowledgeKitchenOrder(orderId, {
+        uid: user.uid,
+        name: displayName,
+      });
+    },
+    [user, displayName]
+  );
+
   // Controlled Manual Reprint Handling with Deduplication & Explicit Status Return
   const reprintOrder = useCallback(async (order: Order): Promise<PrintResult> => {
     const now = new Date().toISOString();
@@ -320,6 +330,7 @@ export const POSRealtimeProvider: React.FC<{ children: React.ReactNode }> = ({ c
     markOrderServed,
     completeOrder,
     cancelOrder,
+    acknowledgeOrder,
     reprintOrder,
     printerStatus,
     printerCapability,

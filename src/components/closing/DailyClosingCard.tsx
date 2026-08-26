@@ -4,12 +4,13 @@ import { formatIQD } from '../../utils/currency';
 import { formatBaghdadDateTime } from '../../utils/dates';
 import { Card } from '../ui/Card';
 import { Button } from '../ui/Button';
-import { Lock, CheckCircle2, AlertCircle, ShieldCheck } from 'lucide-react';
+import { Lock, CheckCircle2, ShieldCheck, Printer } from 'lucide-react';
 
 interface DailyClosingCardProps {
   closing: DailyClosing | null;
   summary: DailySummary;
   onOpenClosingModal: () => void;
+  onPrintDailyReport?: () => void;
   isOnline: boolean;
 }
 
@@ -17,6 +18,7 @@ export const DailyClosingCard: React.FC<DailyClosingCardProps> = ({
   closing,
   summary,
   onOpenClosingModal,
+  onPrintDailyReport,
   isOnline,
 }) => {
   const isClosed = !!closing;
@@ -60,11 +62,6 @@ export const DailyClosingCard: React.FC<DailyClosingCardProps> = ({
 
             <p
               className={`text-xs ${isClosed ? 'text-gray-400' : 'text-gray-500'}`}
-              style={{
-                fontWeight: 'normal',
-                textAlign: 'center',
-                color: '#49638f',
-              }}
             >
               {isClosed
                 ? `لە ڕێکەوتی ${formatBaghdadDateTime(closing.closedAt)} لەلایەن (${closing.closedByName || 'کاشێر'}) داخراوە.`
@@ -73,27 +70,48 @@ export const DailyClosingCard: React.FC<DailyClosingCardProps> = ({
           </div>
         </div>
 
-        {/* Action Button if open */}
-        {!isClosed ? (
-          <Button
-            id="open-closing-dialog-btn"
-            variant="secondary"
-            size="lg"
-            onClick={onOpenClosingModal}
-            disabled={!isOnline || (summary.orderCount === 0 && summary.expenseCount === 0)}
-            className="gap-2 shrink-0 font-bold bg-gray-900 hover:bg-black text-white rounded-2xl"
-          >
-            <Lock className="w-4 h-4" />
-            <span>داخستنی سندوقی ئەمڕۆ</span>
-          </Button>
-        ) : (
-          <div className="text-left shrink-0 bg-gray-800 px-4 py-2.5 rounded-2xl border border-gray-700">
-            <span className="text-[10px] text-gray-400 block font-medium">قازانجی پاکی داخراو</span>
-            <span className="text-base font-black text-orange-400" dir="rtl">
-              {formatIQD(closing.netProfit)}
-            </span>
-          </div>
-        )}
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2 shrink-0">
+          {onPrintDailyReport && (
+            <Button
+              id="print-daily-closing-report-btn"
+              type="button"
+              variant="outline"
+              size="md"
+              onClick={onPrintDailyReport}
+              className={`gap-2 rounded-2xl font-bold cursor-pointer ${
+                isClosed
+                  ? 'border-gray-700 text-gray-200 hover:bg-gray-800 hover:text-white'
+                  : 'border-orange-200 text-orange-950 hover:bg-orange-50'
+              }`}
+              title="چاپکردنی پسوولەی حسابی ئەمڕۆ بە چاپکەری پەڕاو (Thermal 58mm)"
+            >
+              <Printer className="w-4 h-4 text-orange-500" />
+              <span>چاپکردنی ڕاپۆرت</span>
+            </Button>
+          )}
+
+          {!isClosed ? (
+            <Button
+              id="open-closing-dialog-btn"
+              variant="secondary"
+              size="lg"
+              onClick={onOpenClosingModal}
+              disabled={!isOnline || (summary.orderCount === 0 && summary.expenseCount === 0)}
+              className="gap-2 font-bold bg-gray-900 hover:bg-black text-white rounded-2xl cursor-pointer"
+            >
+              <Lock className="w-4 h-4" />
+              <span>داخستنی سندوقی ئەمڕۆ</span>
+            </Button>
+          ) : (
+            <div className="text-left bg-gray-800 px-4 py-2 rounded-2xl border border-gray-700">
+              <span className="text-[10px] text-gray-400 block font-medium">قازانجی پاکی داخراو</span>
+              <span className="text-base font-black text-orange-400" dir="rtl">
+                {formatIQD(closing.netProfit)}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Snapshot metrics if already closed */}

@@ -96,7 +96,7 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
 
   try {
     const createdOrder = await runTransaction(db, async (transaction) => {
-      // 3. Atomically read and increment sequence counter for today
+      // 3. Atomically read sequence counter for today (READ)
       const counterSnap = await transaction.get(counterDocRef);
       let sequence = 1;
 
@@ -104,16 +104,6 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
         const counterData = counterSnap.data();
         sequence = (counterData.sequence || 0) + 1;
       }
-
-      transaction.set(
-        counterDocRef,
-        {
-          sequence,
-          date: baghdadDate,
-          updatedAt: serverTimestamp(),
-        },
-        { merge: true }
-      );
 
       const orderNumber = `#${sequence.toString().padStart(3, '0')}`;
 
@@ -140,6 +130,8 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
         kitchenPrintAttempts: 0,
         statusHistory: [initialHistoryItem],
         preparingAt: serverTimestamp(),
+        inventoryProcessed: true,
+        inventoryProcessedAt: serverTimestamp(),
         createdAt: serverTimestamp(),
         createdBy: userId,
         createdByName: userName,
@@ -148,12 +140,39 @@ export async function createOrder(params: CreateOrderParams): Promise<Order> {
         updatedAt: serverTimestamp(),
       };
 
+      // 5. Atomic inventory deduction - performs ingredient/product gets before writes
+      await executeOrderInventoryDeduction(
+        transaction,
+        newOrderDoc,
+        {
+          ...orderPayload,
+          createdAt: new Date(),
+          preparingAt: new Date(),
+          inventoryProcessed: false, // Ensure deduction executes for the new order
+        } as Order,
+        userId,
+        userName,
+        true // isNewDocument: avoids transaction.update on uncommitted new doc
+      );
+
+      // 6. WRITES: Write counter and order doc
+      transaction.set(
+        counterDocRef,
+        {
+          sequence,
+          date: baghdadDate,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+
       transaction.set(newOrderDoc, orderPayload);
 
       return {
         ...orderPayload,
         createdAt: new Date(),
         preparingAt: new Date(),
+        inventoryProcessed: true,
       };
     });
 
@@ -287,6 +306,24 @@ export async function cancelOrder(
   user: TransitionUser
 ): Promise<void> {
   return transitionOrderStatus(orderId, 'cancelled', user, reason);
+}
+
+/**
+ * Acknowledges an order in the kitchen without altering operational status.
+ */
+export async function acknowledgeKitchenOrder(
+  orderId: string,
+  user: { uid: string; name?: string }
+): Promise<void> {
+  if (!orderId) throw new Error('Invalid order ID');
+  const orderDocRef = doc(db, ORDERS_COLLECTION, orderId);
+  await updateDoc(orderDocRef, {
+    kitchenAcknowledged: true,
+    kitchenAcknowledgedAt: serverTimestamp(),
+    kitchenAcknowledgedBy: user.uid,
+    kitchenAcknowledgedByName: user.name || 'چێشتخانە',
+    updatedAt: serverTimestamp(),
+  });
 }
 
 /**

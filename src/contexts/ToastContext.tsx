@@ -2,17 +2,30 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info';
 
+export interface ToastAction {
+  label: string;
+  onClick?: () => void;
+  id?: string;
+}
+
 export interface ToastMessage {
   id: string;
   type: ToastType;
   title?: string;
   message: string;
   duration?: number;
+  action?: ToastAction;
 }
 
 interface ToastContextType {
   toasts: ToastMessage[];
-  showToast: (message: string, type?: ToastType, title?: string, duration?: number) => void;
+  showToast: (
+    message: string,
+    type?: ToastType,
+    title?: string,
+    duration?: number,
+    action?: ToastAction
+  ) => void;
   removeToast: (id: string) => void;
   success: (message: string, title?: string) => void;
   error: (message: string, title?: string) => void;
@@ -30,9 +43,15 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, []);
 
   const showToast = useCallback(
-    (message: string, type: ToastType = 'info', title?: string, duration: number = 3500) => {
+    (
+      message: string,
+      type: ToastType = 'info',
+      title?: string,
+      duration: number = 3500,
+      action?: ToastAction
+    ) => {
       const id = Math.random().toString(36).substring(2, 9);
-      const newToast: ToastMessage = { id, type, message, title, duration };
+      const newToast: ToastMessage = { id, type, message, title, duration, action };
 
       setToasts((prev) => [...prev, newToast]);
 

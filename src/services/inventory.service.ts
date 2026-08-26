@@ -467,7 +467,8 @@ export async function executeOrderInventoryDeduction(
   orderDocRef: DocumentReference,
   order: Order,
   userId: string,
-  userName?: string
+  userName?: string,
+  isNewDocument: boolean = false
 ): Promise<void> {
   // 1. Mandatory duplicate deduction protection
   if (order.inventoryProcessed) {
@@ -475,10 +476,12 @@ export async function executeOrderInventoryDeduction(
   }
 
   if (!order.items || order.items.length === 0) {
-    transaction.update(orderDocRef, {
-      inventoryProcessed: true,
-      inventoryProcessedAt: serverTimestamp(),
-    });
+    if (!isNewDocument) {
+      transaction.update(orderDocRef, {
+        inventoryProcessed: true,
+        inventoryProcessedAt: serverTimestamp(),
+      });
+    }
     return;
   }
 
@@ -526,10 +529,12 @@ export async function executeOrderInventoryDeduction(
 
   // 4. If no ingredients are configured for any product in this order
   if (aggregatedRequirements.size === 0) {
-    transaction.update(orderDocRef, {
-      inventoryProcessed: true,
-      inventoryProcessedAt: serverTimestamp(),
-    });
+    if (!isNewDocument) {
+      transaction.update(orderDocRef, {
+        inventoryProcessed: true,
+        inventoryProcessedAt: serverTimestamp(),
+      });
+    }
     return;
   }
 
@@ -579,9 +584,11 @@ export async function executeOrderInventoryDeduction(
     }
   }
 
-  // 7. Authoritatively mark order as inventory processed
-  transaction.update(orderDocRef, {
-    inventoryProcessed: true,
-    inventoryProcessedAt: serverTimestamp(),
-  });
+  // 7. Authoritatively mark order as inventory processed for existing documents
+  if (!isNewDocument) {
+    transaction.update(orderDocRef, {
+      inventoryProcessed: true,
+      inventoryProcessedAt: serverTimestamp(),
+    });
+  }
 }

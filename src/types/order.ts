@@ -51,5 +51,9 @@ export interface Order {
   baghdadDate?: string; // YYYY-MM-DD for indexed grouping
   inventoryProcessed?: boolean; // Duplicate deduction protection
   inventoryProcessedAt?: any; // Firestore Timestamp
+  kitchenAcknowledged?: boolean; // Kitchen acknowledgement flag
+  kitchenAcknowledgedAt?: any; // Firestore Timestamp
+  kitchenAcknowledgedBy?: string; // Auth UID
+  kitchenAcknowledgedByName?: string;
   updatedAt?: any;
 }

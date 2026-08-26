@@ -1,7 +1,6 @@
-import React, { useState, useMemo } from 'react';
-import { Order, OrderStatus } from '../../types/order';
+import React, { useState } from 'react';
+import { Order } from '../../types/order';
 import { usePOSRealtime } from '../../contexts/POSRealtimeContext';
-import { useAuth } from '../../contexts/AuthContext';
 import { useNetworkStatus } from '../../hooks/useNetworkStatus';
 import { formatIQD } from '../../utils/currency';
 import { formatBaghdadTime } from '../../utils/dates';
@@ -12,7 +11,6 @@ import { Modal } from '../ui/Modal';
 import { EmptyState } from '../ui/EmptyState';
 import {
   Utensils,
-  CheckCircle2,
   Printer,
   Clock,
   User,
@@ -21,10 +19,9 @@ import {
   MessageSquare,
   RefreshCw,
   AlertTriangle,
-  Send,
   XCircle,
-  Check,
-  ChevronRight,
+  Eye,
+  CheckCircle2,
 } from 'lucide-react';
 
 const QUICK_CANCEL_REASONS = [
@@ -38,112 +35,69 @@ const QUICK_CANCEL_REASONS = [
 export const OrderPreparationQueue: React.FC = () => {
   const {
     activeOrders,
-    preparingOrders,
-    readyOrders,
-    servedOrders,
     preparingCount,
-    readyCount,
-    servedCount,
     totalActiveCount,
     loading,
-    markOrderReady,
-    markOrderServed,
-    completeOrder,
     cancelOrder,
+    acknowledgeOrder,
     reprintOrder,
   } = usePOSRealtime();
 
-  const { role } = useAuth();
-  const { success, error, warning } = useToast();
+  const { success, error, warning, info } = useToast();
   const { isOnline } = useNetworkStatus();
 
-  const [filterStatus, setFilterStatus] = useState<'all' | 'preparing' | 'ready' | 'served'>('all');
-  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
   const [printingOrderId, setPrintingOrderId] = useState<string | null>(null);
+  const [acknowledgingOrderId, setAcknowledgingOrderId] = useState<string | null>(null);
+  const [hideSeenOrders, setHideSeenOrders] = useState<boolean>(false);
+  const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
 
   // Cancellation Modal State
   const [cancelModalOrder, setCancelModalOrder] = useState<Order | null>(null);
   const [cancelReason, setCancelReason] = useState<string>('');
   const [isCancelling, setIsCancelling] = useState<boolean>(false);
 
-  // Filter orders based on active tab
-  const displayedOrders = useMemo(() => {
-    switch (filterStatus) {
-      case 'preparing':
-        return preparingOrders;
-      case 'ready':
-        return readyOrders;
-      case 'served':
-        return servedOrders;
-      case 'all':
-      default:
-        return activeOrders;
-    }
-  }, [filterStatus, activeOrders, preparingOrders, readyOrders, servedOrders]);
-
-  const handleMarkReady = async (order: Order) => {
-    if (!isOnline) {
-      error('پەیوەندی ئینتەرنێت پچڕاوە. ناتوانرێت دۆخی داواکاری بگۆڕدرێت.');
-      return;
-    }
-    try {
-      setUpdatingOrderId(order.orderId);
-      await markOrderReady(order.orderId);
-      const orderNum =
-        order.orderNumber ||
-        (order.orderId ? `#${order.orderId.slice(-4).toUpperCase()}` : '#001');
-      success(`داواکاری ${orderNum} ئامادەکرا`);
-    } catch (err: any) {
-      console.error('Error marking ready:', err);
-      error(err.message || 'هەڵەیەک لە گۆڕینی دۆخی داواکاری ڕوویدا');
-    } finally {
-      setUpdatingOrderId(null);
-    }
-  };
-
-  const handleMarkServed = async (order: Order) => {
-    if (!isOnline) {
-      error('پەیوەندی ئینتەرنێت پچڕاوە. ناتوانرێت دۆخی داواکاری بگۆڕدرێت.');
-      return;
-    }
-    try {
-      setUpdatingOrderId(order.orderId);
-      await markOrderServed(order.orderId);
-      const orderNum =
-        order.orderNumber ||
-        (order.orderId ? `#${order.orderId.slice(-4).toUpperCase()}` : '#001');
-      success(`داواکاری ${orderNum} گەیەنرا بە کڕیار`);
-    } catch (err: any) {
-      console.error('Error marking served:', err);
-      error(err.message || 'هەڵەیەک لە گۆڕینی دۆخی داواکاری ڕوویدا');
-    } finally {
-      setUpdatingOrderId(null);
-    }
-  };
-
-  const handleCompleteOrder = async (order: Order) => {
-    if (!isOnline) {
-      error('پەیوەندی ئینتەرنێت پچڕاوە. ناتوانرێت داواکاری تەواو بکرێت.');
-      return;
-    }
-    try {
-      setUpdatingOrderId(order.orderId);
-      await completeOrder(order.orderId);
-      const orderNum =
-        order.orderNumber ||
-        (order.orderId ? `#${order.orderId.slice(-4).toUpperCase()}` : '#001');
-      success(`داواکاری ${orderNum} بە سەرکەوتوویی تەواو کرا`);
-    } catch (err: any) {
-      console.error('Error completing order:', err);
-      error(err.message || 'هەڵەیەک لە تەواوکردنی داواکاری ڕوویدا');
-    } finally {
-      setUpdatingOrderId(null);
-    }
-  };
-
   const handleOpenCancelModal = (order: Order) => {
     setCancelModalOrder(order);
     setCancelReason('');
+  };
+
+  const handleRefreshAndClearSeen = () => {
+    setIsRefreshing(true);
+    setHideSeenOrders(true);
+    setTimeout(() => {
+      setIsRefreshing(false);
+      const seenCount = activeOrders.filter((o) => !!o.kitchenAcknowledged).length;
+      if (seenCount > 0) {
+        success(`لیستەکە نوێکرایەوە و (${seenCount}) پسوولەی بینراو لادران`);
+      } else {
+        info('لیستەکە نوێکرایەوە (هیچ پسوولەیەکی بینراو نییە بۆ لابردن)');
+      }
+    }, 350);
+  };
+
+  const handleToggleShowAll = () => {
+    setHideSeenOrders(!hideSeenOrders);
+  };
+
+  const handleAcknowledge = async (order: Order) => {
+    if (!isOnline) {
+      error('پەیوەندی ئینتەرنێت پچڕاوە');
+      return;
+    }
+
+    try {
+      setAcknowledgingOrderId(order.orderId);
+      await acknowledgeOrder(order.orderId);
+      const orderNum =
+        order.orderNumber ||
+        (order.orderId ? `#${order.orderId.slice(-4).toUpperCase()}` : '#001');
+      success(`داواکاری ${orderNum} بینرا`);
+    } catch (err: any) {
+      console.error('Acknowledge error:', err);
+      error(err.message || 'هەڵەیەک ڕوویدا');
+    } finally {
+      setAcknowledgingOrderId(null);
+    }
   };
 
   const handleConfirmCancel = async () => {
@@ -204,152 +158,86 @@ export const OrderPreparationQueue: React.FC = () => {
     );
   }
 
+  const unseenCount = activeOrders.filter((o) => !o.kitchenAcknowledged).length;
+  const seenCount = activeOrders.filter((o) => !!o.kitchenAcknowledged).length;
+  const displayedOrders = hideSeenOrders
+    ? activeOrders.filter((o) => !o.kitchenAcknowledged)
+    : activeOrders;
+
   return (
     <div id="order-preparation-queue" className="space-y-4 select-none">
-      {/* Operational Status Counters Bar */}
-      <div className="grid grid-cols-3 gap-3">
-        {/* Preparing Counter */}
-        <div
-          onClick={() => setFilterStatus('preparing')}
-          className={`p-3 sm:p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-            filterStatus === 'preparing'
-              ? 'bg-amber-500 text-white border-amber-600 shadow-sm'
-              : 'bg-white text-gray-800 border-amber-200 hover:bg-amber-50/50'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <Utensils
-              className={`w-4 h-4 sm:w-5 sm:h-5 ${
-                filterStatus === 'preparing' ? 'text-white' : 'text-amber-500'
-              }`}
-            />
-            <span className="text-xs sm:text-sm font-bold">لە ئامادەکردندا</span>
-          </div>
-          <span
-            className={`font-mono font-black text-sm sm:text-base px-2 py-0.5 rounded-xl ${
-              filterStatus === 'preparing'
-                ? 'bg-white text-amber-600'
-                : 'bg-amber-100 text-amber-900'
-            }`}
-          >
-            {preparingCount}
-          </span>
+      {/* Operational Header Bar */}
+      <div className="p-3.5 sm:p-4 rounded-2xl border bg-white text-gray-800 border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-2xs">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Utensils className="w-5 h-5 text-amber-500" />
+          <span className="text-sm sm:text-base font-bold">لیستی داواکارییە نێردراوەکان بۆ ئامادەکردن</span>
+          {unseenCount > 0 && (
+            <span className="text-xs font-black px-2 py-0.5 rounded-lg bg-orange-500 text-white animate-pulse">
+              {unseenCount} نوێ
+            </span>
+          )}
+          {hideSeenOrders && (
+            <span className="text-xs font-bold px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-800 border border-emerald-300">
+              بینراوەکان شاردراونەتەوە
+            </span>
+          )}
         </div>
 
-        {/* Ready Counter */}
-        <div
-          onClick={() => setFilterStatus('ready')}
-          className={`p-3 sm:p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-            filterStatus === 'ready'
-              ? 'bg-blue-600 text-white border-blue-700 shadow-sm'
-              : 'bg-white text-gray-800 border-blue-200 hover:bg-blue-50/50'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <CheckCircle2
-              className={`w-4 h-4 sm:w-5 sm:h-5 ${
-                filterStatus === 'ready' ? 'text-white' : 'text-blue-500'
-              }`}
-            />
-            <span className="text-xs sm:text-sm font-bold">ئامادەیە</span>
-          </div>
-          <span
-            className={`font-mono font-black text-sm sm:text-base px-2 py-0.5 rounded-xl ${
-              filterStatus === 'ready'
-                ? 'bg-white text-blue-600'
-                : 'bg-blue-100 text-blue-900'
-            }`}
+        <div className="flex items-center gap-2">
+          {/* Refresh and Clean Seen Orders Button */}
+          <button
+            id="refresh-clear-seen-btn"
+            type="button"
+            onClick={handleRefreshAndClearSeen}
+            disabled={isRefreshing}
+            className="flex items-center gap-1.5 text-xs font-black bg-amber-500 hover:bg-amber-600 active:scale-95 text-white px-3.5 py-2 rounded-2xl shadow-2xs transition-all cursor-pointer"
+            title="ڕیفرێش و لابردنی ئەو پسوولانەی بینراون لەسەر شاشە"
           >
-            {readyCount}
+            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+            <span>ڕیفرێش و لابردنی بینراوەکان</span>
+          </button>
+
+          {/* Toggle all vs unseen view */}
+          {seenCount > 0 && (
+            <button
+              id="toggle-seen-filter-btn"
+              type="button"
+              onClick={handleToggleShowAll}
+              className={`text-xs font-bold px-3 py-2 rounded-2xl border transition-colors cursor-pointer ${
+                hideSeenOrders
+                  ? 'bg-white text-gray-700 hover:bg-gray-50 border-gray-200'
+                  : 'bg-emerald-50 text-emerald-800 border-emerald-300 hover:bg-emerald-100'
+              }`}
+            >
+              {hideSeenOrders ? `پیشاندانەوەی بینراوەکان (${seenCount})` : 'تەنها نەبینراوەکان'}
+            </button>
+          )}
+
+          <span className="font-mono font-black text-xs sm:text-sm px-3 py-1.5 rounded-xl bg-amber-100 text-amber-900 border border-amber-300">
+            {displayedOrders.length} داواکاری
           </span>
         </div>
-
-        {/* Served Counter */}
-        <div
-          onClick={() => setFilterStatus('served')}
-          className={`p-3 sm:p-4 rounded-2xl border transition-all cursor-pointer flex items-center justify-between ${
-            filterStatus === 'served'
-              ? 'bg-emerald-600 text-white border-emerald-700 shadow-sm'
-              : 'bg-white text-gray-800 border-emerald-200 hover:bg-emerald-50/50'
-          }`}
-        >
-          <div className="flex items-center gap-2">
-            <Send
-              className={`w-4 h-4 sm:w-5 sm:h-5 ${
-                filterStatus === 'served' ? 'text-white' : 'text-emerald-500'
-              }`}
-            />
-            <span className="text-xs sm:text-sm font-bold">گەیەنراو</span>
-          </div>
-          <span
-            className={`font-mono font-black text-sm sm:text-base px-2 py-0.5 rounded-xl ${
-              filterStatus === 'served'
-                ? 'bg-white text-emerald-600'
-                : 'bg-emerald-100 text-emerald-900'
-            }`}
-          >
-            {servedCount}
-          </span>
-        </div>
-      </div>
-
-      {/* Filter Navigation Tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1">
-        <button
-          type="button"
-          onClick={() => setFilterStatus('all')}
-          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-            filterStatus === 'all'
-              ? 'bg-orange-500 text-white shadow-xs'
-              : 'bg-white text-gray-600 hover:bg-orange-50 border border-orange-200/80'
-          }`}
-        >
-          هەموو چالاکەکان ({totalActiveCount})
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setFilterStatus('preparing')}
-          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-            filterStatus === 'preparing'
-              ? 'bg-amber-500 text-white shadow-xs'
-              : 'bg-white text-gray-600 hover:bg-amber-50 border border-orange-200/80'
-          }`}
-        >
-          لە ئامادەکردندا ({preparingCount})
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setFilterStatus('ready')}
-          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-            filterStatus === 'ready'
-              ? 'bg-blue-600 text-white shadow-xs'
-              : 'bg-white text-gray-600 hover:bg-blue-50 border border-orange-200/80'
-          }`}
-        >
-          ئامادەیە بۆ گەیاندن ({readyCount})
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setFilterStatus('served')}
-          className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-            filterStatus === 'served'
-              ? 'bg-emerald-600 text-white shadow-xs'
-              : 'bg-white text-gray-600 hover:bg-emerald-50 border border-orange-200/80'
-          }`}
-        >
-          گەیەنراوە ({servedCount})
-        </button>
       </div>
 
       {displayedOrders.length === 0 ? (
-        <div className="py-12">
+        <div className="py-12 bg-white rounded-3xl border border-dashed border-amber-200 text-center p-8">
           <EmptyState
-            title="هیچ داواکارییەک لەم دۆخەدا نییە"
-            description="داواکارییە نوێیەکان و گۆڕانکاری دۆخ بە شێوەی ڕاستەوخۆ لێرەدا دەردەکەون."
+            title={hideSeenOrders && activeOrders.length > 0 ? "هەموو داواکارییە بینراوەکان لادران لە لیستەکە" : "هیچ داواکارییەک لە ئامادەکردندا نییە"}
+            description={hideSeenOrders && activeOrders.length > 0 ? `(${seenCount}) داواکاری بینراون و ئامادەکراون. دەتوانیت پەنجە بنێیت لە "پیشاندانەوەی بینراوەکان".` : "داواکارییە نوێیەکان ڕاستەوخۆ دوای ناردن لێرەدا دەردەکەون."}
             icon={<Utensils className="w-8 h-8 text-orange-400" />}
+            action={
+              hideSeenOrders && activeOrders.length > 0 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setHideSeenOrders(false)}
+                  className="rounded-2xl font-bold mt-2"
+                >
+                  پیشاندانەوەی هەموو داواکارییەکان
+                </Button>
+              ) : undefined
+            }
           />
         </div>
       ) : (
@@ -359,23 +247,18 @@ export const OrderPreparationQueue: React.FC = () => {
             const orderNumDisplay =
               order.orderNumber ||
               (order.orderId ? `#${order.orderId.slice(-4).toUpperCase()}` : '#001');
-            const isUpdating = updatingOrderId === order.orderId;
             const isPrinting = printingOrderId === order.orderId;
-
-            const isPreparing = order.status === 'preparing';
-            const isReady = order.status === 'ready';
-            const isServed = order.status === 'served';
+            const isAcknowledging = acknowledgingOrderId === order.orderId;
+            const isSeen = !!order.kitchenAcknowledged;
 
             return (
               <Card
                 key={order.orderId}
                 id={`prep-order-${order.orderId}`}
                 className={`flex flex-col justify-between bg-white border-2 shadow-sm rounded-3xl p-4 sm:p-5 text-right transition-all ${
-                  isPreparing
-                    ? 'border-amber-200 hover:border-amber-400'
-                    : isReady
-                    ? 'border-blue-300 hover:border-blue-500 bg-blue-50/20'
-                    : 'border-emerald-200 hover:border-emerald-400 bg-emerald-50/20'
+                  isSeen
+                    ? 'border-emerald-200 hover:border-emerald-300 bg-emerald-50/20'
+                    : 'border-amber-300 hover:border-amber-400 shadow-md ring-1 ring-amber-200'
                 }`}
               >
                 <div>
@@ -401,22 +284,15 @@ export const OrderPreparationQueue: React.FC = () => {
 
                     <div className="flex flex-col items-end gap-1">
                       {/* Operational Status Pill */}
-                      {isPreparing && (
+                      {isSeen ? (
+                        <span className="flex items-center gap-1 text-[11px] font-black bg-emerald-100 text-emerald-900 px-2.5 py-0.5 rounded-lg border border-emerald-300">
+                          <CheckCircle2 className="w-3 h-3 text-emerald-700" />
+                          <span>بینراوە</span>
+                        </span>
+                      ) : (
                         <span className="flex items-center gap-1 text-[11px] font-black bg-amber-100 text-amber-900 px-2.5 py-0.5 rounded-lg border border-amber-300">
                           <Utensils className="w-3 h-3 text-amber-700" />
                           <span>لە ئامادەکردندایە</span>
-                        </span>
-                      )}
-                      {isReady && (
-                        <span className="flex items-center gap-1 text-[11px] font-black bg-blue-100 text-blue-900 px-2.5 py-0.5 rounded-lg border border-blue-300 animate-pulse">
-                          <CheckCircle2 className="w-3 h-3 text-blue-700" />
-                          <span>ئامادەیە</span>
-                        </span>
-                      )}
-                      {isServed && (
-                        <span className="flex items-center gap-1 text-[11px] font-black bg-emerald-100 text-emerald-900 px-2.5 py-0.5 rounded-lg border border-emerald-300">
-                          <Send className="w-3 h-3 text-emerald-700" />
-                          <span>گەیەنراوە</span>
                         </span>
                       )}
 
@@ -480,116 +356,71 @@ export const OrderPreparationQueue: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Lifecycle Tracker bar */}
-                  <div className="pt-2 flex items-center justify-between text-[10px] text-gray-500 font-medium">
-                    <div className="flex items-center gap-1">
-                      <span className={isPreparing ? 'font-bold text-amber-600' : 'text-gray-400'}>
-                        ئامادەکردن
-                      </span>
-                      <ChevronRight className="w-3 h-3 text-gray-300" />
-                      <span className={isReady ? 'font-bold text-blue-600' : 'text-gray-400'}>
-                        ئامادە
-                      </span>
-                      <ChevronRight className="w-3 h-3 text-gray-300" />
-                      <span className={isServed ? 'font-bold text-emerald-600' : 'text-gray-400'}>
-                        گەیەنراو
-                      </span>
-                    </div>
-
-                    {order.createdByName && (
-                      <div className="flex items-center gap-1 text-[10px] text-gray-400">
-                        <User className="w-3 h-3" />
-                        <span>{order.createdByName}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Action Buttons depending on status */}
-                <div className="pt-4 space-y-2">
-                  <div className="flex items-center gap-2">
-                    {/* Primary Action Button */}
-                    {isPreparing && (
-                      <Button
-                        id={`mark-ready-${order.orderId}`}
-                        type="button"
-                        variant="primary"
-                        size="md"
-                        onClick={() => handleMarkReady(order)}
-                        isLoading={isUpdating}
-                        className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-black py-2.5 rounded-2xl shadow-xs text-xs sm:text-sm gap-1.5 cursor-pointer"
-                      >
-                        <Check className="w-4 h-4" />
-                        <span>ئامادەیە</span>
-                      </Button>
-                    )}
-
-                    {isReady && (
-                      <Button
-                        id={`mark-served-${order.orderId}`}
-                        type="button"
-                        variant="primary"
-                        size="md"
-                        onClick={() => handleMarkServed(order)}
-                        isLoading={isUpdating}
-                        className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-black py-2.5 rounded-2xl shadow-xs text-xs sm:text-sm gap-1.5 cursor-pointer"
-                      >
-                        <Send className="w-4 h-4" />
-                        <span>گەیەنرا</span>
-                      </Button>
-                    )}
-
-                    {isServed && (
-                      <Button
-                        id={`complete-order-${order.orderId}`}
-                        type="button"
-                        variant="primary"
-                        size="md"
-                        onClick={() => handleCompleteOrder(order)}
-                        isLoading={isUpdating}
-                        disabled={role === 'captain'}
-                        className={`flex-1 font-black py-2.5 rounded-2xl shadow-xs text-xs sm:text-sm gap-1.5 ${
-                          role === 'captain'
-                            ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                            : 'bg-emerald-700 hover:bg-emerald-800 text-white cursor-pointer'
-                        }`}
-                        title={role === 'captain' ? 'تەواوکردنی دارایی تایبەتە بە کاشێر' : 'تەواوکردنی داواکاری'}
-                      >
-                        <CheckCircle2 className="w-4 h-4" />
-                        <span>تەواوکردن</span>
-                      </Button>
-                    )}
-
-                    {/* Manual Reprint Button */}
-                    <Button
-                      id={`reprint-order-${order.orderId}`}
-                      type="button"
-                      variant="outline"
-                      size="md"
-                      onClick={() => handleReprintReceipt(order)}
-                      isLoading={isPrinting}
-                      className="px-3 py-2.5 rounded-2xl border-orange-200 hover:bg-orange-50 text-gray-700 font-bold text-xs gap-1 cursor-pointer shrink-0"
-                      title="چاپکردنەوەی پسوولە"
-                    >
-                      <Printer className="w-4 h-4 text-orange-500" />
-                      <span className="hidden sm:inline">چاپکردنەوە</span>
-                    </Button>
-                  </div>
-
-                  {/* Cancel Button (allowed for preparing and ready states) */}
-                  {(isPreparing || isReady) && (
-                    <div className="flex justify-end">
-                      <button
-                        id={`cancel-order-btn-${order.orderId}`}
-                        type="button"
-                        onClick={() => handleOpenCancelModal(order)}
-                        className="text-[11px] font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-2.5 py-1 rounded-xl transition-all flex items-center gap-1 cursor-pointer"
-                      >
-                        <XCircle className="w-3.5 h-3.5" />
-                        <span>هەڵوەشاندنەوەی داواکاری</span>
-                      </button>
+                  {/* Order Creator info */}
+                  {order.createdByName && (
+                    <div className="pt-2 flex items-center justify-end text-[10px] text-gray-400 gap-1">
+                      <User className="w-3 h-3" />
+                      <span>{order.createdByName}</span>
                     </div>
                   )}
+                </div>
+
+                {/* Operations Actions: Seen Button ("بینی"), Reprint and Cancel */}
+                <div className="pt-4 flex items-center justify-between gap-2">
+                  {/* Single Action "بینی" Button */}
+                  <button
+                    id={`seen-order-btn-${order.orderId}`}
+                    type="button"
+                    onClick={() => handleAcknowledge(order)}
+                    disabled={isAcknowledging || isSeen}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-2xl text-xs sm:text-sm font-black transition-all cursor-pointer shadow-2xs ${
+                      isSeen
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-300 opacity-90 cursor-default'
+                        : 'bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white shadow-sm'
+                    }`}
+                    title={isSeen ? 'داواکاری بینراوە' : 'دیاریکردن وەک بینراو'}
+                  >
+                    {isAcknowledging ? (
+                      <RefreshCw className="w-4 h-4 animate-spin text-white" />
+                    ) : isSeen ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4 text-emerald-700" />
+                        <span>بینراوە</span>
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="w-4 h-4" />
+                        <span>بینی</span>
+                      </>
+                    )}
+                  </button>
+
+                  {/* Manual Reprint Button */}
+                  <Button
+                    id={`reprint-order-${order.orderId}`}
+                    type="button"
+                    variant="outline"
+                    size="md"
+                    onClick={() => handleReprintReceipt(order)}
+                    isLoading={isPrinting}
+                    className="px-3 py-2 rounded-2xl border-orange-200 hover:bg-orange-50 text-gray-700 font-bold text-xs gap-1.5 cursor-pointer"
+                    title="چاپکردنەوەی پسوولە"
+                  >
+                    <Printer className="w-4 h-4 text-orange-500" />
+                    <span className="hidden sm:inline">چاپکردنەوە</span>
+                  </Button>
+
+                  {/* Cancel Button */}
+                  <button
+                    id={`cancel-order-btn-${order.orderId}`}
+                    type="button"
+                    onClick={() => handleOpenCancelModal(order)}
+                    className="text-[11px] font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-1 cursor-pointer"
+                    title="هەڵوەشاندنەوەی داواکاری"
+                  >
+                    <XCircle className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">هەڵوەشاندن</span>
+                  </button>
                 </div>
               </Card>
             );

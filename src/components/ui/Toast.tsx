@@ -43,6 +43,22 @@ export const ToastContainer: React.FC = () => {
               <p className="text-xs sm:text-sm text-neutral-200 leading-snug">{toast.message}</p>
             </div>
 
+            {toast.action && (
+              <button
+                id={toast.action.id || `toast-action-${toast.id}`}
+                type="button"
+                onClick={() => {
+                  if (toast.action?.onClick) {
+                    toast.action.onClick();
+                  }
+                  removeToast(toast.id);
+                }}
+                className="shrink-0 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white text-xs font-black rounded-lg shadow-sm transition-all cursor-pointer border border-orange-400 self-center"
+              >
+                {toast.action.label}
+              </button>
+            )}
+
             <button
               id={`toast-close-${toast.id}`}
               type="button"
